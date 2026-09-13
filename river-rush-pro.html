@@ -1297,41 +1297,84 @@ loadNatureModels().then(() => {
 // 圆形橡皮筏（TorusGeometry — 原版风格的圆形充气筏）
 //==================================================================
 function createRaft() {
+  // 圆形充气橡皮筏(参考图): 大红橡胶浮圈+充气底板+黄绳串红白浮标
   const g = new THREE.Group();
-  // 橡皮材质：哑光+轻微高光=充气橡胶质感
-  const tubeMat = new THREE.MeshStandardMaterial({ color: 0xffdd00, roughness: 0, metalness: 0.0, envMapIntensity: 2.0 });
-  const floorMat = new THREE.MeshStandardMaterial({ color: 0xeec800, roughness: 0, metalness: 0.0, envMapIntensity: 1.5 });
-  const highlightMat = new THREE.MeshStandardMaterial({ color: 0xffe840, roughness: 0, metalness: 0.0, envMapIntensity: 2.0 });
-  const strapMat = new THREE.MeshStandardMaterial({ color: 0xb89000, roughness: 0, metalness: 0.0, envMapIntensity: 1.0 });
+  // 充气PVC: 光滑饱满有明显高光(envMap反射天空)
+  const rubberRed = new THREE.MeshStandardMaterial({ color: 0xd93a26, roughness: 0.3, metalness: 0.0, envMapIntensity: 1.5 });
+  const rubberDark = new THREE.MeshStandardMaterial({ color: 0xa8261a, roughness: 0.38, metalness: 0.0, envMapIntensity: 1.2 });
+  const ropeMat = new THREE.MeshStandardMaterial({ color: 0xf2c024, roughness: 0.75, metalness: 0.0 });
+  // 底板纵向条纹贴图(充气底板的棱纹)
+  const floorTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const x = c.getContext('2d');
+    x.fillStyle = '#d93a26'; x.fillRect(0, 0, 128, 128);
+    x.fillStyle = '#b0281a';
+    for (let i = 0; i < 128; i += 16) x.fillRect(i, 0, 6, 128); // 纵向棱纹
+    const t = new THREE.CanvasTexture(c);
+    return t;
+  })();
+  // 浮标贴图: 红白相间条纹(沿圆柱长度方向分带)
+  const floatTex = (() => {
+    const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+    const x = c.getContext('2d');
+    x.fillStyle = '#f2f2ee'; x.fillRect(0, 0, 64, 64);
+    x.fillStyle = '#d93a26';
+    for (let i = 0; i < 64; i += 16) x.fillRect(0, i, 64, 8); // 横向红带→圆柱长度方向的环带
+    return new THREE.CanvasTexture(c);
+  })();
 
-  // 外圈充气环——增加分段数让表面更圆滑
-  const tube = new THREE.Mesh(new THREE.TorusGeometry(2.0, 0.45, 24, 48), tubeMat);
-  tube.position.y = 0.45;
+  // 1. 主浮圈——饱满粗管, 高分段圆滑
+  const tube = new THREE.Mesh(new THREE.TorusGeometry(2.0, 0.5, 22, 56), rubberRed);
+  tube.position.y = 0.5;
   tube.rotation.x = Math.PI / 2;
   tube.castShadow = true; tube.receiveShadow = false;
   g.add(tube);
 
-  // 高光环（内圈细管）
-  const highlight = new THREE.Mesh(new THREE.TorusGeometry(2.0, 0.1, 16, 48), highlightMat);
-  highlight.position.y = 0.75;
-  highlight.rotation.x = Math.PI / 2;
-  g.add(highlight);
+  // 2. 内层细管(暗红)——参考图的饱满双层结构
+  const inner = new THREE.Mesh(new THREE.TorusGeometry(1.62, 0.19, 14, 48), rubberDark);
+  inner.position.y = 0.34;
+  inner.rotation.x = Math.PI / 2;
+  inner.castShadow = true;
+  g.add(inner);
 
-  // 底板（橡皮底——薄圆盘）
-  const floor = new THREE.Mesh(new THREE.CylinderGeometry(1.95, 1.95, 0.08, 32), floorMat);
-  floor.position.y = 0.08;
-  floor.castShadow = true; floor.receiveShadow = false;
+  // 3. 充气底板(棱纹)——顶面保持y=0.12(人物站立面不变)
+  const floor = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.88, 1.88, 0.12, 40),
+    new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.42, metalness: 0.0, envMapIntensity: 1.0 })
+  );
+  floor.position.y = 0.06;
+  floor.receiveShadow = true;
   g.add(floor);
 
-  // 桨（两侧）
-  const paddleMat = new THREE.MeshStandardMaterial({ map: barkTexBroad, roughness: 0.8 });
-  // 两侧把手
-  const handleMat = tubeMat.clone();
-  const handleL = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.08, 12, 24), handleMat);
-  handleL.position.set(-2.1, 0.55, 0); handleL.rotation.x = Math.PI / 2; handleL.castShadow = true; g.add(handleL);
-  const handleR = handleL.clone(); handleR.position.x = 2.1; g.add(handleR);
+  // 4. 黄色编织绳(外圈局部弧)
+  const ropeGeo = new THREE.TorusGeometry(2.54, 0.048, 8, 64, 1.7);
+  ropeGeo.rotateZ(-0.35);
+  ropeGeo.rotateX(Math.PI / 2);
+  const rope = new THREE.Mesh(ropeGeo, ropeMat);
+  rope.position.y = 0.5;
+  g.add(rope);
 
-  g.userData = { handleL, handleR };
+  // 5. 红白条纹浮标×3(串在绳上) + 橙黄端盖
+  const floatGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.52, 16);
+  floatGeo.rotateX(Math.PI / 2); // 轴向→Z
+  const capGeo = new THREE.CylinderGeometry(0.11, 0.11, 0.1, 12);
+  capGeo.rotateX(Math.PI / 2);
+  const capMat = new THREE.MeshStandardMaterial({ color: 0xf0a020, roughness: 0.45, metalness: 0.0 });
+  const floatMat = new THREE.MeshStandardMaterial({ map: floatTex, roughness: 0.4, metalness: 0.0, envMapIntensity: 1.2 });
+  for (const th of [-0.15, 0.35, 0.85]) {
+    const fb = new THREE.Mesh(floatGeo, floatMat);
+    fb.position.set(Math.cos(th) * 2.54, 0.5, Math.sin(th) * 2.54);
+    fb.rotation.y = -th; // 沿绳切向
+    g.add(fb);
+    for (const d of [-1, 1]) {
+      const cap = new THREE.Mesh(capGeo, capMat);
+      cap.position.set(Math.cos(th) * 2.54 - Math.sin(th) * d * 0.31, 0.5, Math.sin(th) * 2.54 + Math.cos(th) * d * 0.31);
+      cap.rotation.y = -th;
+      g.add(cap);
+    }
+  }
+
+  g.userData = {};
   return g;
 }
 const raft = createRaft();
