@@ -2023,7 +2023,7 @@ const LMS = {
 async function initPose() {
   try {
     const mpPose = new window.Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${f}` });
-    mpPose.setOptions({ modelComplexity:0, smoothLandmarks:true, enableSegmentation:false, minDetectionConfidence:0.5, minTrackingConfidence:0.5 });
+    mpPose.setOptions({ modelComplexity:0, smoothLandmarks:true, enableSegmentation:false, minDetectionConfidence:0.5, minTrackingConfidence:0.5, delegate:'GPU' }); // GPU委托: 推理不占主线程(默认CPU会阻塞rAF→游戏锁~20帧); 初始化失败MediaPipe自动回退CPU
     mpPose.onResults(onPoseResults);
     const videoEl = document.createElement('video'); videoEl.setAttribute('playsinline',''); videoEl.muted = true;
     const mpCamera = new window.Camera(videoEl, { onFrame: async () => { await mpPose.send({ image: videoEl }); }, width:640, height:480 });
@@ -2036,8 +2036,8 @@ function onPoseResults(results) {
   pctx.save(); pctx.scale(-1,1); pctx.translate(-poseCanvas.width,0);
   pctx.drawImage(results.image,0,0,poseCanvas.width,poseCanvas.height); pctx.restore();
   const lm = results.poseLandmarks;
-  if (!lm) { poseData.detected=false; poseStatus.textContent='🔴'; return; }
-  poseData.detected=true; poseStatus.textContent='🟢';
+  if (!lm) { poseData.detected=false; if (_hud.pose !== false) { poseStatus.textContent='🔴'; _hud.pose = false; } return; }
+  poseData.detected=true; if (_hud.pose !== true) { poseStatus.textContent='🟢'; _hud.pose = true; }
   const lhip=lm[LMS.lHip], rhip=lm[LMS.rHip];
   let hipMidX=(lhip.x+rhip.x)/2, hipMidY=(lhip.y+rhip.y)/2; hipMidX=1-hipMidX;
   poseData.smoothHipX=poseData.smoothHipX*0.7+hipMidX*0.3;
@@ -3182,10 +3182,14 @@ function update(dt) {
 
   splashParticles.update(dt); goldParticles.update(dt); updateCamera(dt, time);
 
-  scoreVal.textContent = score; distVal.textContent = Math.floor(distance)+'m';
-  livesEl.textContent = '🐋'.repeat(Math.max(0,lives)) || '💔';
+  // DOM变更守卫: 无变化时跳过写入(每帧无条件写会弄脏布局)
+  if (score !== _hud.score) { scoreVal.textContent = score; _hud.score = score; }
+  const distStr = Math.floor(distance)+'m';
+  if (distStr !== _hud.dist) { distVal.textContent = distStr; _hud.dist = distStr; }
+  const livesStr = '🐋'.repeat(Math.max(0,lives)) || '💔';
+  if (livesStr !== _hud.lives) { livesEl.textContent = livesStr; _hud.lives = livesStr; }
   const dotLeft = 50 + (poseData.detected ? poseData.lean : raftState.x/CFG.raftMaxOffset)*42;
-  leanDot.style.left = dotLeft + '%';
+  if (Math.abs(dotLeft - _hud.dot) > 0.1) { leanDot.style.left = dotLeft + '%'; _hud.dot = dotLeft; }
   raft.visible = invuln <= 0 || Math.floor(invuln*12)%2===0;
   if (lives <= 0) { raft.visible=true; gameOver(); }
 }
@@ -3196,6 +3200,7 @@ function update(dt) {
 const clock = new THREE.Clock();
 let frameCount = 0;
 let fpsFrames = 0, fpsTime = 0;
+const _hud = { score: -1, dist: '', lives: '', dot: -999 };
 let renderError = false;
 function loop() {
   frameCount++;
