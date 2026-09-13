@@ -1330,6 +1330,20 @@ function createRaft() {
   tube.castShadow = true; tube.receiveShadow = false;
   g.add(tube);
 
+  // 1b. 黑色麻绳缠绕: 每90°一道, 绕主浮圈管截面一圈(垂直环切向)
+  const ropeLashMat = new THREE.MeshStandardMaterial({ color: 0x241f19, roughness: 0.88, metalness: 0.0 });
+  const lashGeo = new THREE.TorusGeometry(0.53, 0.052, 8, 28); // 半径略大于管径0.5→贴住管面
+  for (let k = 0; k < 4; k++) {
+    const th = k * Math.PI / 2;
+    const lash = new THREE.Mesh(lashGeo, ropeLashMat);
+    // 环中心线: 半径2.0, 高度0.5
+    lash.position.set(Math.cos(th) * 2.0, 0.5, Math.sin(th) * 2.0);
+    // torus法线默认+Z, 绕Y转-θ后法线=(sin(-θ),0,cos(-θ))=(-sinθ,0,cosθ)=环切向
+    lash.rotation.y = -th;
+    lash.castShadow = true;
+    g.add(lash);
+  }
+
   // 2. 内层细管(暗红)——参考图的饱满双层结构
   const inner = new THREE.Mesh(new THREE.TorusGeometry(1.62, 0.19, 14, 48), rubberDark);
   inner.position.y = 0.34;
