@@ -1075,7 +1075,6 @@ function loadNatureModels() {
               if (o.material) {
                 o.material.envMapIntensity = 0; // 关掉环境光反射
                 o.material.roughness = 1.0; // 完全哑光
-                o.material.metalness = 0; // 金属度归零: 金属无漫反射+无环境反射=纯黑(荷花花朵实测变黑)
                 // 提亮绿色：如果材质有颜色，向嫩绿偏移
                 const col = o.material.color;
                 if (col) {
@@ -1086,11 +1085,6 @@ function loadNatureModels() {
                     col.r = Math.min(1, r * 1.3 + 0.05);
                     col.g = Math.min(1, g * 1.15 + 0.1);
                     col.b = Math.min(1, b * 0.7);
-                  } else if (r > g && r > b) {
-                    // 偏红/粉(花瓣): 提亮成明亮粉, 否则深粉在哑光下发黑
-                    col.r = Math.min(1, r * 1.6 + 0.1);
-                    col.g = Math.min(1, g * 1.4 + 0.04);
-                    col.b = Math.min(1, b * 1.5 + 0.08);
                   }
                 }
               }
@@ -1141,7 +1135,6 @@ function cloneNature(name) {
       o.castShadow = true; o.receiveShadow = true;
       if (o.material) {
         o.material.envMapIntensity = 0;
-        o.material.metalness = 0;
         const col = o.material.color;
         if (col) {
           const r = col.r, g = col.g, b = col.b;
@@ -1149,10 +1142,6 @@ function cloneNature(name) {
             col.r = Math.min(1, r * 1.3 + 0.05);
             col.g = Math.min(1, g * 1.15 + 0.1);
             col.b = Math.min(1, b * 0.7);
-          } else if (r > g && r > b) {
-            col.r = Math.min(1, r * 1.6 + 0.1);
-            col.g = Math.min(1, g * 1.4 + 0.04);
-            col.b = Math.min(1, b * 1.5 + 0.08);
           }
         }
       }
