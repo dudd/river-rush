@@ -1,0 +1,3436 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>River Rush 3D Pro — 体感急流勇进</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#0a0e1a;
+    font-family:'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; user-select:none; }
+  #gameCanvas { display:block; position:absolute; top:0; left:0; }
+  #vignette { position:absolute; inset:0; pointer-events:none; z-index:15;
+    box-shadow: inset 0 0 300px rgba(0,10,30,.5); }
+  #speedFx { position:absolute; inset:0; pointer-events:none; z-index:13; opacity:0;
+    transition:opacity .4s; background:radial-gradient(ellipse 60% 100% at 50% 50%, transparent 50%, rgba(180,220,255,.1) 100%); }
+
+  /* ===== 摄像头窗口 ===== */
+  #camWrap { position:absolute; top:12px; right:12px; width:180px; height:135px;
+    border:2px solid rgba(126,152,255,.35); border-radius:12px; overflow:hidden;
+    box-shadow:0 4px 18px rgba(2,6,23,.55), inset 0 1px 0 rgba(226,232,255,.08); z-index:20; background:#0a0e1a; }
+  #camWrap canvas { width:100%; height:100%; }
+  #camLabel { position:absolute; bottom:2px; left:0; right:0; text-align:center;
+    font-size:10px; color:rgba(226,232,255,.7); text-shadow:0 1px 3px #000; }
+  #poseStatus { position:absolute; top:4px; left:6px; font-size:11px; z-index:21; }
+
+  /* ===== HUD ===== */
+  #hud { position:absolute; top:12px; left:12px; z-index:20; display:flex; gap:10px; }
+  .hud-box {
+    background:linear-gradient(165deg, rgba(19,28,54,.88), rgba(7,11,26,.92));
+    border:1px solid rgba(126,152,255,.25); border-radius:10px; padding:5px 14px;
+    color:#e6ebf8; text-shadow:0 1px 2px rgba(0,0,0,.7); backdrop-filter:blur(8px);
+    box-shadow:0 4px 12px rgba(2,6,23,.35), inset 0 1px 0 rgba(226,232,255,.06);
+    min-width:72px; text-align:center;
+  }
+  .hud-box .label { font-size:9px; opacity:.6; text-transform:uppercase; letter-spacing:1.5px; }
+  .hud-box .val { font-size:22px; font-weight:800; line-height:1.15; }
+  .hud-score .val { color:#fcd34d; }
+  .hud-fps .val { color:#86efac; font-size:14px; min-width:34px; }
+  .hud-lives .val { color:#ff6b6b; font-size:18px; letter-spacing:2px; }
+  .hud-dist .val { color:#7dd3fc; }
+
+  /* ===== 任务面板 ===== */
+  #questPanel {
+    position:absolute; top:12px; right:204px; z-index:20;
+    background:linear-gradient(165deg, rgba(19,28,54,.92), rgba(7,11,26,.95));
+    border:1px solid rgba(126,152,255,.3); border-radius:12px; padding:10px 14px;
+    color:#e6ebf8; font-size:12px; min-width:200px; max-width:280px;
+    box-shadow:0 8px 24px rgba(2,6,23,.45), 0 0 0 1px rgba(77,107,254,.08), inset 0 1px 0 rgba(226,232,255,.08);
+    backdrop-filter:blur(10px);
+    animation:quest-panel-in 280ms cubic-bezier(.22,1,.36,1);
+  }
+  @keyframes quest-panel-in { from{opacity:0;transform:translateY(6px) scale(.97)} to{opacity:1;transform:translateY(0) scale(1)} }
+  #questPanel.hidden { display:none !important; }
+  .quest-title {
+    font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1.5px;
+    background:linear-gradient(90deg,#a9c1ff,#6c8bff 60%,#4d6bfe);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    margin-bottom:6px;
+  }
+  .quest-item { display:flex; align-items:center; gap:8px; padding:4px 0; }
+  .quest-icon { font-size:16px; line-height:1; }
+  .quest-text { flex:1; color:#c8d6f0; font-size:11px; line-height:1.4; }
+  .quest-progress { font-size:11px; font-weight:700; color:#7dd3fc; white-space:nowrap; }
+  .quest-item.done .quest-text { color:#6a7a8a; text-decoration:line-through; }
+  .quest-item.done .quest-progress { color:#4ade80; }
+  .quest-bar { width:100%; height:4px; border-radius:2px; background:rgba(126,152,255,.15); margin-top:2px; overflow:hidden; }
+  .quest-bar-fill { height:100%; border-radius:2px; background:linear-gradient(90deg,#4d6bfe,#7dd3fc); transition:width .3s ease; }
+  .quest-item.done .quest-bar-fill { background:linear-gradient(90deg,#22c55e,#4ade80); }
+
+  /* ===== 倾斜指示 ===== */
+  #leanBar { position:absolute; bottom:16px; left:50%; transform:translateX(-50%);
+    width:220px; height:10px; z-index:20; border-radius:6px;
+    background:rgba(19,28,54,.6); border:1px solid rgba(126,152,255,.3); backdrop-filter:blur(6px); }
+  #leanDot { position:absolute; top:-4px; width:18px; height:18px; border-radius:50%;
+    background:linear-gradient(180deg,#ffd23f,#f59e0b); border:2px solid rgba(255,255,255,.8); left:50%; margin-left:-9px;
+    transition:left .06s linear; box-shadow:0 2px 8px rgba(255,210,63,.4); }
+  #leanHint { position:absolute; bottom:34px; left:50%; transform:translateX(-50%);
+    z-index:20; font-size:12px; color:rgba(226,232,255,.6); text-shadow:0 1px 2px #000; white-space:nowrap; }
+
+  /* ===== 急流提示 ===== */
+  #rapidFx { position:absolute; bottom:50px; left:50%; transform:translateX(-50%);
+    z-index:20; font-size:15px; color:#7dd3fc; text-shadow:0 0 12px rgba(125,211,252,.8);
+    opacity:0; transition:opacity .3s; font-weight:700; letter-spacing:1px; }
+  #comboFx { position:absolute; top:18%; right:6%; z-index:20; font-size:26px; font-weight:900;
+    color:#ffd34d; text-shadow:0 0 16px rgba(255,180,60,.9), 0 2px 0 #7a4a00;
+    opacity:0; transition:opacity .25s, transform .12s; pointer-events:none; }
+  #comboFx.pop { transform:scale(1.25); }
+  #qteFx { position:absolute; top:30%; left:50%; transform:translate(-50%,-50%); z-index:22;
+    font-size:44px; font-weight:900; color:#ffe066; text-shadow:0 0 24px rgba(255,140,0,.95), 0 3px 0 #8a4a00;
+    opacity:0; transition:opacity .15s; pointer-events:none; letter-spacing:2px; }
+  #qteFx.pulse { animation:qtePulse .35s infinite alternate; }
+  @keyframes qtePulse { from { transform:translate(-50%,-50%) scale(1); } to { transform:translate(-50%,-50%) scale(1.18); } }
+  #comboFx.pop { transform:scale(1.25); }
+  #stageBanner { position:absolute; top:20%; left:50%; transform:translateX(-50%); z-index:21;
+    font-size:34px; font-weight:900; color:#fff; text-shadow:0 0 24px rgba(80,160,255,.9), 0 2px 0 rgba(0,0,0,.4);
+    opacity:0; transition:opacity .8s; pointer-events:none; letter-spacing:3px; }
+  #powerBar { position:absolute; top:64px; left:16px; z-index:20; display:flex; gap:6px; pointer-events:none; }
+  #sharkWarn { position:absolute; top:12%; left:50%; transform:translateX(-50%); z-index:21;
+    font-size:30px; font-weight:900; color:#ff4455; text-shadow:0 0 20px rgba(255,40,60,.95);
+    opacity:0; transition:opacity .2s; pointer-events:none; animation:sharkPulse .4s infinite alternate; display:none; }
+  @keyframes sharkPulse { from { transform:translateX(-50%) scale(1); } to { transform:translateX(-50%) scale(1.15); } }
+  .pw-item { display:none; flex-direction:column; gap:3px; background:rgba(19,28,54,.8); border:1px solid rgba(126,152,255,.35);
+    border-radius:10px; padding:6px 12px; font-size:13px; font-weight:700; color:#cfe0ff; backdrop-filter:blur(4px); min-width:86px; }
+  .pw-item.on { display:flex; }
+  .pw-item b { font-weight:800; letter-spacing:.5px; }
+  .pw-bar { width:100%; height:4px; background:rgba(255,255,255,.14); border-radius:2px; overflow:hidden; }
+  .pw-fill { display:block; height:100%; width:100%; background:linear-gradient(90deg,#4dd0ff,#ffd34d); border-radius:2px; }
+  .pw-note { font-size:10px; color:#8ea6ff; }
+
+  /* ===== 覆盖层（开始/结束屏） ===== */
+  .overlay { position:absolute; inset:0; z-index:50; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center;
+    background:radial-gradient(ellipse at center,rgba(19,28,54,.85),rgba(5,8,20,.97)); }
+  .overlay h1 { font-size:clamp(36px,7vw,72px); font-weight:900; color:#fff;
+    text-shadow:0 4px 0 #1a2a5a, 0 8px 28px rgba(77,107,254,.3); margin-bottom:6px; letter-spacing:3px; }
+  .overlay h1 span {
+    background:linear-gradient(90deg,#ffd23f,#ff8c1a 50%,#ffd23f);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .overlay .sub { font-size:clamp(13px,1.8vw,18px); color:#8ea6ff; margin-bottom:24px; max-width:540px; line-height:1.6; }
+  .overlay .controls { display:flex; gap:28px; margin-bottom:26px; flex-wrap:wrap; justify-content:center; }
+  .ctrl-item { color:#c8d6f0; font-size:13px; max-width:150px;
+    background:linear-gradient(165deg,rgba(19,28,54,.6),rgba(7,11,26,.7));
+    border:1px solid rgba(126,152,255,.2); border-radius:10px; padding:10px 14px; backdrop-filter:blur(6px); }
+  .ctrl-item .ico { font-size:30px; display:block; margin-bottom:4px; }
+  .overlay button { font-size:22px; font-weight:800; color:#fff; background:linear-gradient(180deg,#4d6bfe,#3a55e0);
+    border:none; border-radius:50px; padding:16px 50px; cursor:pointer;
+    box-shadow:0 6px 0 #2a3fb0, 0 10px 28px rgba(77,107,254,.35);
+    transition:transform .1s, box-shadow .1s, filter .12s; letter-spacing:2px; }
+  .overlay button:hover { filter:brightness(1.1); transform:translateY(-2px); box-shadow:0 8px 0 #2a3fb0, 0 14px 32px rgba(77,107,254,.45); }
+  .overlay button:active { transform:translateY(4px); box-shadow:0 2px 0 #2a3fb0; }
+  .overlay button:disabled { opacity:.5; cursor:wait; }
+  #diffRow { display:flex; gap:10px; margin-bottom:18px; }
+  .diff-btn { font-size:15px !important; font-weight:700 !important; padding:8px 22px !important;
+    background:rgba(77,107,254,.25) !important; box-shadow:none !important; border:1px solid rgba(126,152,255,.4);
+    transform:none !important; }
+  .diff-btn.sel { background:linear-gradient(180deg,#4d6bfe,#3a55e0) !important; border-color:#8fa7ff;
+    box-shadow:0 0 16px rgba(77,107,254,.6); }
+  .overlay .score-line {
+    font-size:32px; font-weight:900; margin:8px 0 4px;
+    background:linear-gradient(90deg,#ffd23f,#fcd34f 50%,#ffd23f);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .overlay .stat-line { font-size:16px; color:#8ea6ff; margin:3px 0; }
+  #loadingDots::after { content:''; animation:dots 1.2s steps(4,end) infinite; }
+  @keyframes dots { 0%{content:''} 25%{content:'.'} 50%{content:'..'} 75%{content:'...'} 100%{content:''} }
+  .hidden { display:none !important; }
+  #loadingPct { font-size:14px; color:#8ea6ff; margin-top:8px; }
+
+  /* ===== 通关/任务完成弹窗 ===== */
+  #questToast {
+    position:absolute; top:50%; right:24px; transform:translateY(-50%) scale(.9);
+    z-index:45; opacity:0; pointer-events:none; transition:all .4s cubic-bezier(.22,1,.36,1);
+    background:linear-gradient(165deg,rgba(19,28,54,.95),rgba(7,11,26,.97));
+    border:1px solid rgba(126,152,255,.4); border-radius:16px; padding:20px 40px;
+    box-shadow:0 12px 40px rgba(2,6,23,.6), 0 0 0 1px rgba(77,107,254,.12), inset 0 1px 0 rgba(226,232,255,.1);
+    backdrop-filter:blur(12px); text-align:center; max-width:220px;
+  }
+  #questToast.show { opacity:1; transform:translateY(-50%) scale(1); }
+  .toast-icon { font-size:40px; margin-bottom:6px; }
+  .toast-title {
+    font-size:20px; font-weight:800; letter-spacing:1px;
+    background:linear-gradient(90deg,#a9c1ff,#6c8bff 60%,#4d6bfe);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .toast-reward { font-size:14px; color:#fcd34d; font-weight:700; margin-top:4px; }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="speedFx"></div>
+<div id="vignette"></div>
+<div id="camWrap">
+  <canvas id="poseCanvas" width="320" height="240"></canvas>
+  <div id="camLabel">体感摄像头</div>
+  <div id="poseStatus">🔴</div>
+</div>
+<div id="hud" class="hidden">
+  <div class="hud-box hud-score"><div class="label">分数</div><div class="val" id="scoreVal">0</div></div>
+  <div class="hud-box hud-lives"><div class="label">生命</div><div class="val" id="lives">🐋🐋🐋</div></div>
+  <div class="hud-box hud-dist"><div class="label">距离</div><div class="val" id="distVal">0m</div></div>
+  <div class="hud-box hud-fps"><div class="label">FPS</div><div class="val" id="fpsVal">--</div></div>
+</div>
+<div id="powerBar" class="hidden">
+  <span class="pw-item" id="pw-magnet"><b>🧲 磁铁</b><span class="pw-bar"><span class="pw-fill" id="pwf-magnet"></span></span></span>
+  <span class="pw-item" id="pw-shield"><b>🛡️ 护盾</b><span class="pw-note">抵挡一次</span></span>
+  <span class="pw-item" id="pw-boost"><b>⚡ 冲刺</b><span class="pw-bar"><span class="pw-fill" id="pwf-boost"></span></span></span>
+  <span class="pw-item" id="pw-double"><b>💰 双倍分数</b><span class="pw-bar"><span class="pw-fill" id="pwf-double"></span></span></span>
+</div>
+<div id="questPanel" class="hidden">
+  <div class="quest-title">🐋 深海任务</div>
+  <div id="questList"></div>
+</div>
+<div id="questToast">
+  <div class="toast-icon" id="toastIcon">🏆</div>
+  <div class="toast-title" id="toastTitle">任务完成！</div>
+  <div class="toast-reward" id="toastReward">+500 分</div>
+</div>
+<div id="leanHint" class="hidden">← 左右移动身体控制方向 · 向上跳起越障 →</div>
+<div id="leanBar" class="hidden"><div id="leanDot"></div></div>
+<div id="rapidFx"></div>
+<div id="stageBanner"></div>
+<div id="qteFx"></div>
+<div id="sharkWarn">🦈 鲨鱼来袭——快跳！</div>
+<div id="comboFx"></div>
+<div id="startScreen" class="overlay">
+  <h1>🐋 RIVER <span>RUSH</span></h1>
+  <p class="sub">体感急流勇进 · 跟随鲸鱼娘穿越深蓝峡谷<br>左右移动身体控制方向，跳起越障，收集水晶！</p>
+  <div class="controls">
+    <div class="ctrl-item"><span class="ico">🧍</span>左右移动身体<br>控制筏子方向</div>
+    <div class="ctrl-item"><span class="ico">⬆️</span>向上跳起<br>越过障碍</div>
+    <div class="ctrl-item"><span class="ico">💎</span>收集水晶<br>完成深海任务</div>
+  </div>
+  <div id="diffRow">
+    <button class="diff-btn" id="diffEasy">😌 简单</button>
+    <button class="diff-btn sel" id="diffNormal">标准</button>
+    <button class="diff-btn" id="diffHard">🔥 困难</button>
+  </div>
+  <button id="startBtn" disabled>加载中<span id="loadingDots"></span></button>
+  <div id="loadingPct">正在初始化3D场景...</div>
+</div>
+<div id="overScreen" class="overlay hidden">
+  <h1>🐋 鲸 <span>落</span> 了！</h1>
+  <div class="score-line" id="finalScore">0</div>
+  <div class="stat-line" id="finalDist">漂流距离：0m</div>
+  <div class="stat-line" id="finalCoins">收集水晶：0</div>
+  <button id="restartBtn">再来一次</button>
+</div>
+<div id="pauseOverlay" style="position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:50;display:none;background:rgba(19,28,54,.85);border:1px solid rgba(126,152,255,.3);border-radius:8px;padding:8px 20px;backdrop-filter:blur(6px);">
+  <span style="font-size:16px;font-weight:700;color:#a9c1ff;">⏸️ 已暂停 · 按 P 继续</span>
+</div>
+<!-- 音频 -->
+<audio id="bgmAudio" loop preload="auto"><source src="assets/audio/bgm_adventure.mp3" type="audio/mp3"></audio>
+<audio id="riverAudio" loop preload="auto"><source src="assets/audio/river_ambient.mp3" type="audio/mp3"></audio>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js" crossorigin="anonymous"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { Water } from 'three/addons/objects/Water.js';
+import { Sky } from 'three/addons/objects/Sky.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+//==================================================================
+// 配置
+//==================================================================
+const CFG = {
+  baseRiverHalfWidth: 9,
+  raftMaxOffset: 7,
+  cameraHeight: 5,
+  cameraBack: 8,
+  cameraLookAhead: 16,
+  baseSpeed: 16,
+  maxSpeed: 38,
+  fogColor: 0x6bb6ff,
+  fogNear: 800,
+  fogFar: 2000,
+};
+
+//==================================================================
+// DOM
+//==================================================================
+const gameCanvas = document.getElementById('gameCanvas');
+const poseCanvas = document.getElementById('poseCanvas');
+const pctx = poseCanvas.getContext('2d');
+const startScreen = document.getElementById('startScreen');
+const overScreen = document.getElementById('overScreen');
+const startBtn = document.getElementById('startBtn');
+const restartBtn = document.getElementById('restartBtn');
+const scoreVal = document.getElementById('scoreVal');
+const livesEl = document.getElementById('lives');
+const distVal = document.getElementById('distVal');
+const finalScore = document.getElementById('finalScore');
+const finalDist = document.getElementById('finalDist');
+const finalCoins = document.getElementById('finalCoins');
+const leanBar = document.getElementById('leanBar');
+const leanDot = document.getElementById('leanDot');
+const leanHint = document.getElementById('leanHint');
+const hud = document.getElementById('hud');
+const poseStatus = document.getElementById('poseStatus');
+const speedFx = document.getElementById('speedFx');
+const loadingPct = document.getElementById('loadingPct');
+const rapidFx = document.getElementById('rapidFx');
+const pauseOverlay = document.getElementById('pauseOverlay');
+
+//==================================================================
+// 状态
+//==================================================================
+const ST = { LOADING:0, READY:1, PLAYING:2, PAUSED:3, OVER:4 };
+let gameState = ST.LOADING;
+const keys = {};
+const bgmAudio = document.getElementById('bgmAudio');
+const riverAudio = document.getElementById('riverAudio');
+bgmAudio.volume = 0.35;
+riverAudio.volume = 0;
+window.addEventListener('keydown', e => { keys[e.key] = true; if(e.key===' ') e.preventDefault();
+  // 空格跳跃——体感不可用时的备用输入
+  if(e.key===' ' && gameState===ST.PLAYING && raftState.onWater) { raftState.vy=12; raftState.onWater=false; raftState.bounceT=0.3; }
+  if(e.key==='p' || e.key==='P' || e.key==='Escape') {
+    if(gameState===ST.PLAYING) { gameState=ST.PAUSED; bgmAudio.pause(); riverAudio.pause(); }
+    else if(gameState===ST.PAUSED) { gameState=ST.PLAYING; bgmAudio.play(); riverAudio.play(); }
+  }
+  // M键静音/取消静音
+  if(e.key==='m' || e.key==='M') {
+    bgmAudio.muted = !bgmAudio.muted;
+    riverAudio.muted = !riverAudio.muted;
+    console.log('静音:', bgmAudio.muted ? '🔇 开' : '🔊 关');
+  }
+});
+window.addEventListener('keyup', e => { keys[e.key] = false; });
+const poseData = { detected:false, lean:0, prevLean:0, leanVel:0, jumpImpulse:false, smoothHipX:0.5, baselineY:0.5, inJump:false, jumpCD:0, jumpEndTime:0,
+  // 手臂角度（弧度）：armLZ/armRZ = 手臂角度(0=向下), elbowL/elbowR = 肘弯曲量
+  armLZ: Math.PI/2, armRZ: Math.PI/2, elbowL: 0, elbowR: 0
+};
+
+//==================================================================
+// 弯曲河流路径函数（核心：定义河流的弯曲和宽窄变化）
+//==================================================================
+// 河流曲线滚动相位——随玩家前进，让河流弯曲真正"迎面而来"
+let riverPhase = 0;
+
+// 河流中心线X偏移——大弯(低频大幅) + 急弯(高频小幅) + 微弯
+// riverPhase 让曲线随玩家前进滚动，真正感受到转弯
+function riverCenterX(z) {
+  const sz = z + riverPhase;
+  return Math.sin(sz * 0.012) * 20           // 大弯：幅度20
+       + Math.sin(sz * 0.035 + 1.5) * 10    // 急弯：幅度10
+       + Math.sin(sz * 0.06 + 0.7) * 4;     // 微弯：幅度4
+}
+// 河流半宽（随z变化而宽窄交替）
+function riverHalfWidth(z) {
+  const sz = z + riverPhase;
+  const base = CFG.baseRiverHalfWidth;
+  const variation = Math.sin(sz * 0.03) * 4 + Math.sin(sz * 0.06 + 0.7) * 2;
+  return Math.max(4.5, base + variation);
+}
+// 河流方向角度（用于相机朝向）
+function riverDirection(z) {
+  const dz = 0.5;
+  const dx = riverCenterX(z - dz) - riverCenterX(z + dz);
+  return Math.atan2(dx, dz * 2);
+}
+// 瀑布：真实高度落差——阶梯式下降，瀑布前方高，后方低并保持
+// 瀑布位置随世界滚动（和植被一样）
+const WATERFALL_SPACING = 1200;
+const WATERFALL_HALF_WIDTH = 10; // 6→10: 落差区间更宽，瀑布变成平滑流水斜面(原本±6太窄,网格采样出折角)
+const WATERFALL_DROP = 14; // 高度增加一倍(7→14)
+
+// 滚动中的瀑布Z位置——初始放在玩家前方
+let waterfallZList = [-1200, -2400, -3600]; // 3个瀑布，间距1200
+
+function isWaterfallZone(z) {
+  for (const wfz of waterfallZList) {
+    if (Math.abs(z - wfz) < WATERFALL_HALF_WIDTH) return true;
+  }
+  return false;
+}
+function isWaterfallZ(z) { return isWaterfallZone(z); }
+
+// 瀑布高度偏移——阶梯式：瀑布前方高，经过瀑布后下降，然后逐渐回升
+// 这样不会无限下降，也不会突然升回来
+function waterfallHeightOffset(z) {
+  let offset = 0;
+  for (const wfz of waterfallZList) {
+    const dz = z - wfz; // 正=瀑布前方（高处），负=瀑布后方（低处）
+    const range = WATERFALL_HALF_WIDTH;
+    const RISE_DIST = 80; // 瀑布后方逐渐回升的距离（长距离，看起来像河流缓流）
+    if (dz > range) {
+      // 瀑布前方：不降
+      offset += 0;
+    } else if (dz > -range) {
+      // 瀑布中心：smoothstep 从 0 降到 DROP
+      const t = (dz + range) / (range * 2);
+      const smooth = t * t * (3 - 2 * t);
+      offset += WATERFALL_DROP * (1 - smooth);
+    } else {
+      // 瀑布后方：从 DROP 逐渐回升到 0
+      const riseT = Math.max(0, Math.min(1, (-dz - range) / RISE_DIST));
+      const riseSmooth = riseT * riseT * (3 - 2 * riseT);
+      offset += WATERFALL_DROP * (1 - riseSmooth);
+    }
+  }
+  return offset;
+}
+function waterfallY(z) { return -waterfallHeightOffset(z); }
+function waterfallHeight(z) { return waterfallY(z); }
+
+// 滚动瀑布位置（每帧调用）
+function scrollWaterfalls(scrollDist) {
+  for (let i = 0; i < waterfallZList.length; i++) {
+    waterfallZList[i] += scrollDist;
+    if (waterfallZList[i] > 50) {
+      // 瀑布滚到玩家后方，回收到最前方——重置高度
+      waterfallZList[i] -= WATERFALL_SPACING * waterfallZList.length;
+    }
+  }
+}
+
+//==================================================================
+// 渲染器
+//==================================================================
+const renderer = new THREE.WebGLRenderer({ canvas: gameCanvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x2a7de8); // 蔚蓝色背景，确保天是蓝的
+// 不设 scene.background，让 Sky 大气散射直接渲染蓝天
+
+// B3 场景阶段——每1000m切换: 峡谷 → 雨林(下雨) → 雾林, 循环
+// fogN/fogFar=雾近远(峡谷设超远≈无雾), terrain=地形材质调色, sun/hemi=光照强度
+const STAGES = [
+  { name: '⛰️ 高山峡谷', bg: 0x2a7de8, water: 0x8ec5e8, terrain: 0xffffff, fogC: 0x2a7de8, fogN: 2500, fogFar: 5000, sun: 1.5, hemi: 1.0, rain: false },
+  { name: '🌴 雨林 · 下雨', bg: 0x4a8f7f, water: 0x6fb89a, terrain: 0x9fe89f, fogC: 0x6fa898, fogN: 120, fogFar: 800, sun: 1.1, hemi: 0.8, rain: true },
+  { name: '🌫️ 迷雾森林', bg: 0x9db4c8, water: 0x9fb8c8, terrain: 0xb8c4cc, fogC: 0xb0c4d4, fogN: 40, fogFar: 320, sun: 1.1, hemi: 0.7, rain: false },
+];
+scene.fog = new THREE.Fog(0x2a7de8, 2500, 5000); // 峡谷阶段雾拉到超远=无雾
+
+// B3 雨粒子系统——雨林阶段启用
+const RAIN_COUNT = 700;
+const rainGeo = new THREE.BufferGeometry();
+{
+  const rp = new Float32Array(RAIN_COUNT * 3);
+  for (let i = 0; i < RAIN_COUNT; i++) {
+    rp[i*3] = (Math.random() - 0.5) * 60;
+    rp[i*3+1] = Math.random() * 30;
+    rp[i*3+2] = -60 + Math.random() * 80;
+  }
+  rainGeo.setAttribute('position', new THREE.BufferAttribute(rp, 3));
+}
+const rain = new THREE.Points(rainGeo, new THREE.PointsMaterial({
+  color: 0xaaccee, size: 0.1, transparent: true, opacity: 0.55, depthWrite: false
+}));
+rain.visible = false;
+rain.frustumCulled = false;
+scene.add(rain);
+function updateRain(dt) {
+  const pos = rainGeo.attributes.position.array;
+  for (let i = 0; i < RAIN_COUNT; i++) {
+    pos[i*3+1] -= 32 * dt;
+    if (pos[i*3+1] < -1) pos[i*3+1] = 26 + Math.random() * 6;
+  }
+  rainGeo.attributes.position.needsUpdate = true;
+}
+// B3 阶段状态：当前值渐变到目标值
+const stageState = {
+  idx: 0,
+  tgt: null,
+  rainOn: false,
+  bannerT: 0,
+  cur: { bg: new THREE.Color(0x2a7de8), water: new THREE.Color(0x8ec5e8), terrain: new THREE.Color(0xffffff), fogC: new THREE.Color(0x2a7de8), fogN: 2500, fogF: 5000, sun: 1.5, hemi: 1.0 },
+};
+const stageBanner = document.getElementById('stageBanner');
+
+const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 6000);
+camera.position.set(0, CFG.cameraHeight, CFG.cameraBack);
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+//==================================================================
+// 天空（物理大气散射）
+//==================================================================
+const sky = new Sky();
+sky.scale.setScalar(10000);
+sky.visible = false; // 禁用Sky着色器(灰色)，用纯色背景
+scene.add(sky);
+const skyU = sky.material.uniforms;
+skyU['turbidity'].value = 0.3;      // 极低浑浊度→纯净蓝天
+skyU['rayleigh'].value = 3.0;       // 高瑞利散射→深蓝
+skyU['mieCoefficient'].value = 0.001;
+skyU['mieDirectionalG'].value = 0.9;
+const sunParams = { elevation: 65, azimuth: 145 };
+const sun = new THREE.Vector3();
+// 可见太阳——发光球体
+const sunMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(60, 32, 32),
+  new THREE.MeshBasicMaterial({ color: 0xfff5d0, fog: false, depthWrite: false })
+);
+scene.add(sunMesh);
+function updateSun() {
+  const phi = THREE.MathUtils.degToRad(90 - sunParams.elevation);
+  const theta = THREE.MathUtils.degToRad(sunParams.azimuth);
+  sun.setFromSphericalCoords(1, phi, theta);
+  skyU['sunPosition'].value.copy(sun);
+  sunMesh.position.copy(sun).multiplyScalar(3000);
+}
+// updateSun() 延迟到 water 声明后调用
+
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+
+//==================================================================
+// 水面（分段mesh跟随河流弯曲 + 着色器波纹）
+//==================================================================
+// 水面：缩小到只覆盖河道宽度附近，不覆盖山体
+// 河流最大半宽约15，水面半宽设为18确保略宽于河道即可
+// 水面：用分段mesh跟随河流弯曲，不用Water平面
+const waterSegments = 360; // 120→360: 每5单位→1.67单位一个顶点, 瀑布落差不再有折角
+const waterPosArr = [];
+const waterUvArr = [];
+const waterIdxArr = [];
+for (let i = 0; i <= waterSegments; i++) {
+  const z = (i / waterSegments) * 600 - 300;
+  const cx = riverCenterX(z);
+  const hw = riverHalfWidth(z);
+  for (let j = 0; j <= 2; j++) {
+    const t = j / 2;
+    const x = cx + (t - 0.5) * 2 * hw;
+    waterPosArr.push(x, 0, z);
+    waterUvArr.push(t * 4, (i / waterSegments) * 30);
+  }
+}
+for (let i = 0; i < waterSegments; i++) {
+  for (let j = 0; j < 2; j++) {
+    const a = i * 3 + j;
+    const b = a + 1, c = a + 3, d = c + 1;
+    waterIdxArr.push(a, c, b, b, c, d);
+  }
+}
+const waterGeo = new THREE.BufferGeometry();
+waterGeo.setAttribute('position', new THREE.Float32BufferAttribute(waterPosArr, 3));
+waterGeo.setAttribute('uv', new THREE.Float32BufferAttribute(waterUvArr, 2));
+waterGeo.setIndex(waterIdxArr);
+waterGeo.computeVertexNormals();
+
+// 水面用MeshStandardMaterial——兼容fog和后处理，不用自定义着色器
+const waterMat = new THREE.MeshStandardMaterial({
+  color: 0x8ec5e8,
+  roughness: 0.1,
+  metalness: 0.0,
+  transparent: true,
+  opacity: 0.55,
+  side: THREE.DoubleSide,
+  envMapIntensity: 0.5,
+});
+const water = new THREE.Mesh(waterGeo, waterMat);
+water.renderOrder = 1;
+scene.add(water);
+updateSun(); // water 已就绪
+
+// 沙子纹理——河底沙地
+function makeSandTexture() {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 512;
+  const cx = c.getContext('2d');
+  // 沙色底
+  cx.fillStyle = '#c4a878'; cx.fillRect(0, 0, 512, 512);
+  const img = cx.getImageData(0, 0, 512, 512);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const n = (Math.random() - 0.5) * 30;
+    img.data[i] = Math.max(0, Math.min(255, img.data[i] + n));
+    img.data[i+1] = Math.max(0, Math.min(255, img.data[i+1] + n));
+    img.data[i+2] = Math.max(0, Math.min(255, img.data[i+2] + n));
+  }
+  cx.putImageData(img, 0, 0);
+  // 画一些小石子
+  cx.fillStyle = 'rgba(140,120,90,.5)';
+  for (let i = 0; i < 60; i++) {
+    cx.beginPath();
+    cx.arc(Math.random()*512, Math.random()*512, 1+Math.random()*4, 0, Math.PI*2);
+    cx.fill();
+  }
+  // 暗色沙纹
+  cx.strokeStyle = 'rgba(180,150,100,.3)'; cx.lineWidth = 1;
+  for (let i = 0; i < 30; i++) {
+    cx.beginPath();
+    const y = Math.random() * 512;
+    cx.moveTo(0, y);
+    for (let x = 0; x < 512; x += 20) cx.lineTo(x, y + Math.sin(x*0.1+i)*8);
+    cx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+const sandTex = makeSandTexture();
+// 纹理声明提前（河床材质需要 grassTex/rockNormal，避免 const TDZ 错误）
+const rockTex = makeRockTexture();
+const rockNormal = makeRockNormal();
+const skinTex = makeSkinTexture();
+// 异步纹理：不能在加载完成前 clone()，否则 clone.image 永远为 undefined → 渲染白色
+// 直接用原始引用，repeat 在原始上设置
+const grassTex = new THREE.TextureLoader().load('assets/textures/floorsGround.jpg');
+grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
+grassTex.colorSpace = THREE.SRGBColorSpace;
+grassTex.repeat.set(2, 8); // 地形用
+const barkTexPalm = new THREE.TextureLoader().load('assets/textures/bark.jpg');
+barkTexPalm.wrapS = barkTexPalm.wrapT = THREE.RepeatWrapping;
+barkTexPalm.colorSpace = THREE.SRGBColorSpace;
+barkTexPalm.repeat.set(1, 3); // 棕榈树用
+const barkTexBroad = new THREE.TextureLoader().load('assets/textures/bark.jpg');
+barkTexBroad.wrapS = barkTexBroad.wrapT = THREE.RepeatWrapping;
+barkTexBroad.colorSpace = THREE.SRGBColorSpace;
+barkTexBroad.repeat.set(1, 2); // 阔叶树用
+
+// 河床 mesh——填补河道空洞，河底沙地
+// 地形只建了左右两岸，河道中间没有 mesh，隐藏水后直接看到沙底
+const bedPosArr = [], bedUvArr = [], bedIdxArr = [], bedColArr = [];
+for (let i = 0; i <= waterSegments; i++) {
+  const z = (i / waterSegments) * 600 - 300;
+  const cx = riverCenterX(z);
+  const hw = riverHalfWidth(z);
+  for (let j = 0; j <= 4; j++) {
+    const t = j / 4;
+    const x = cx + (t - 0.5) * 2 * (hw + 5); // 更宽于河道，嵌入岸壁填充缝隙
+    bedPosArr.push(x, -1.8, z); // 再下移50%(-1.2→-1.8)
+    bedUvArr.push(t * 3, (i / waterSegments) * 20);
+    // 顶点颜色：嫩绿（和山体一致）
+    bedColArr.push(0.45, 0.9, 0.2);
+  }
+}
+for (let i = 0; i < waterSegments; i++) {
+  for (let j = 0; j < 4; j++) {
+    const a = i * 5 + j, b = a + 1, c = a + 5, d = c + 1;
+    bedIdxArr.push(a, c, b, b, c, d);
+  }
+}
+const bedGeo = new THREE.BufferGeometry();
+bedGeo.setAttribute('position', new THREE.Float32BufferAttribute(bedPosArr, 3));
+bedGeo.setAttribute('uv', new THREE.Float32BufferAttribute(bedUvArr, 2));
+bedGeo.setAttribute('color', new THREE.Float32BufferAttribute(bedColArr, 3));
+bedGeo.setIndex(bedIdxArr);
+bedGeo.computeVertexNormals();
+const riverbedMat = new THREE.MeshStandardMaterial({
+  vertexColors: true, roughness: 0.98, metalness: 0.0,
+  map: grassTex, normalMap: rockNormal.clone(),
+  normalScale: new THREE.Vector2(0.3, 0.3),
+  envMapIntensity: 0.15,
+  side: THREE.DoubleSide,
+});
+const riverbed = new THREE.Mesh(bedGeo, riverbedMat);
+riverbed.receiveShadow = true;
+scene.add(riverbed);
+
+// PMREM 环境贴图（在 water 之后，确保渲染器状态正确）
+const envRT = pmremGenerator.fromScene(sky);
+scene.environment = envRT.texture;
+renderer.setRenderTarget(null); // 重置渲染目标，防止PMREM残留状态
+pmremGenerator.dispose();
+
+//==================================================================
+// 白云（程序化贴图）
+//==================================================================
+function makeCloudTexture() {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 256;
+  const cx = c.getContext('2d');
+  cx.clearRect(0, 0, 512, 256);
+  // 底层：大块柔和云体
+  for (let i = 0; i < 15; i++) {
+    const x = 256 + (Math.random()-0.5) * 380;
+    const y = 128 + (Math.random()-0.5) * 100;
+    const rx = 55 + Math.random() * 70;
+    const ry = 28 + Math.random() * 35;
+    cx.save();
+    cx.translate(x, y);
+    cx.scale(rx/50, ry/50);
+    const g = cx.createRadialGradient(0, 0, 0, 0, 0, 50);
+    g.addColorStop(0, 'rgba(255,255,255,0.7)');
+    g.addColorStop(0.6, 'rgba(255,255,255,0.3)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    cx.fillStyle = g;
+    cx.fillRect(-60, -60, 120, 120);
+    cx.restore();
+  }
+  // 中层：蓬松云团
+  for (let i = 0; i < 25; i++) {
+    const x = 256 + (Math.random()-0.5) * 420;
+    const y = 128 + (Math.random()-0.5) * 120;
+    const r = 22 + Math.random() * 40;
+    const g = cx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, 'rgba(255,255,255,0.85)');
+    g.addColorStop(0.5, 'rgba(248,248,255,0.4)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    cx.fillStyle = g;
+    cx.fillRect(0, 0, 512, 256);
+  }
+  // 顶层：小亮块增加层次感
+  for (let i = 0; i < 20; i++) {
+    const x = 256 + (Math.random()-0.5) * 360;
+    const y = 128 + (Math.random()-0.5) * 90;
+    const r = 12 + Math.random() * 20;
+    const g = cx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, 'rgba(255,255,255,0.95)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    cx.fillStyle = g;
+    cx.fillRect(0, 0, 512, 256);
+  }
+  // 底部阴影让云有立体感
+  for (let i = 0; i < 10; i++) {
+    const x = 256 + (Math.random()-0.5) * 340;
+    const y = 140 + (Math.random()-0.5) * 50;
+    const r = 25 + Math.random() * 35;
+    const g = cx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, 'rgba(200,210,230,0.25)');
+    g.addColorStop(1, 'rgba(200,210,230,0)');
+    cx.fillStyle = g;
+    cx.fillRect(0, 0, 512, 256);
+  }
+  // 边缘四角渐隐——只擦除四角防止刀切
+  cx.globalCompositeOperation = 'destination-out';
+  // 顶部
+  const gTop = cx.createLinearGradient(0, 0, 0, 40);
+  gTop.addColorStop(0, 'rgba(0,0,0,0.5)');
+  gTop.addColorStop(1, 'rgba(0,0,0,0)');
+  cx.fillStyle = gTop; cx.fillRect(0, 0, 512, 40);
+  // 底部
+  const gBot = cx.createLinearGradient(0, 216, 0, 256);
+  gBot.addColorStop(0, 'rgba(0,0,0,0)');
+  gBot.addColorStop(1, 'rgba(0,0,0,0.5)');
+  cx.fillStyle = gBot; cx.fillRect(0, 216, 512, 40);
+  // 左侧
+  const gLeft = cx.createLinearGradient(0, 0, 40, 0);
+  gLeft.addColorStop(0, 'rgba(0,0,0,0.5)');
+  gLeft.addColorStop(1, 'rgba(0,0,0,0)');
+  cx.fillStyle = gLeft; cx.fillRect(0, 0, 40, 256);
+  // 右侧
+  const gRight = cx.createLinearGradient(472, 0, 512, 0);
+  gRight.addColorStop(0, 'rgba(0,0,0,0)');
+  gRight.addColorStop(1, 'rgba(0,0,0,0.5)');
+  cx.fillStyle = gRight; cx.fillRect(472, 0, 40, 256);
+  cx.globalCompositeOperation = 'source-over';
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+const cloudTex = makeCloudTexture();
+const clouds = [];
+for (let i = 0; i < 5; i++) {
+  const w = 80 + Math.random()*60;
+  const h = w * (0.35 + Math.random()*0.25);
+  const cloudGeo = new THREE.PlaneGeometry(w, h);
+  const cloudMat = new THREE.MeshBasicMaterial({
+    map: cloudTex, transparent: true, opacity: 0,
+    depthWrite: false, fog: false,
+  });
+  const cloud = new THREE.Mesh(cloudGeo, cloudMat);
+  cloud.position.set(
+    (Math.random()-0.5) * 500,
+    65 + Math.random() * 50,
+    (Math.random()-0.5) * 800
+  );
+  cloud.rotation.x = -0.2;
+  cloud.rotation.z = (Math.random()-0.5) * 0.3;
+  cloud.userData = { baseZ: cloud.position.z, drift: 2 + Math.random()*4, sway: Math.random()*Math.PI*2, fadeIn: 1.0, targetOpacity: 0.75 + Math.random()*0.2 };
+  scene.add(cloud);
+  clouds.push(cloud);
+}
+
+//==================================================================
+// 灯光
+//==================================================================
+const sunLight = new THREE.DirectionalLight(0xfff4d6, 1.5);
+sunLight.position.copy(sun).multiplyScalar(80);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(2048, 2048);
+sunLight.shadow.camera.near = 1;
+sunLight.shadow.camera.far = 200;
+sunLight.shadow.camera.left = -35;
+sunLight.shadow.camera.right = 35;
+sunLight.shadow.camera.top = 35;
+sunLight.shadow.camera.bottom = -35;
+sunLight.shadow.bias = -0.0005;
+sunLight.shadow.intensity = 0.5; // 减弱阴影深度
+scene.add(sunLight);
+const hemiLight = new THREE.HemisphereLight(0x8ec5e8, 0x6a8a4a, 1.0);
+scene.add(hemiLight);
+
+//==================================================================
+// 程序化纹理
+//==================================================================
+function makeRockTexture() {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 512;
+  const cx = c.getContext('2d');
+  cx.fillStyle = '#5a524a'; cx.fillRect(0, 0, 512, 512);
+  const img = cx.getImageData(0, 0, 512, 512);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const n = (Math.random() - 0.5) * 40;
+    img.data[i] = Math.max(0, Math.min(255, img.data[i] + n));
+    img.data[i+1] = Math.max(0, Math.min(255, img.data[i+1] + n));
+    img.data[i+2] = Math.max(0, Math.min(255, img.data[i+2] + n));
+  }
+  cx.putImageData(img, 0, 0);
+  cx.strokeStyle = 'rgba(40,35,30,.6)'; cx.lineWidth = 2;
+  for (let i = 0; i < 25; i++) {
+    cx.beginPath();
+    const x = Math.random() * 512, y = Math.random() * 512;
+    cx.moveTo(x, y);
+    for (let j = 0; j < 4; j++) cx.lineTo(x + (Math.random()-0.5)*120, y + (Math.random()-0.5)*120);
+    cx.stroke();
+  }
+  cx.fillStyle = 'rgba(60,100,40,.4)';
+  for (let i = 0; i < 80; i++) { cx.beginPath(); cx.arc(Math.random()*512, Math.random()*512, 3+Math.random()*8, 0, Math.PI*2); cx.fill(); }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+function makeRockNormal() {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 512;
+  const cx = c.getContext('2d');
+  cx.fillStyle = '#8080ff'; cx.fillRect(0, 0, 512, 512);
+  const img = cx.getImageData(0, 0, 512, 512);
+  for (let i = 0; i < img.data.length; i += 4) {
+    img.data[i] = (Math.random()-0.5)*80+128; img.data[i+1] = (Math.random()-0.5)*80+128; img.data[i+2] = 255; img.data[i+3] = 255;
+  }
+  cx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+// 皮肤纹理
+function makeSkinTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 256;
+  const cx = c.getContext('2d');
+  cx.fillStyle = '#f4c896'; cx.fillRect(0, 0, 256, 256);
+  const img = cx.getImageData(0, 0, 256, 256);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const n = (Math.random() - 0.5) * 15;
+    img.data[i] = Math.max(0, Math.min(255, img.data[i] + n));
+    img.data[i+1] = Math.max(0, Math.min(255, img.data[i+1] + n));
+    img.data[i+2] = Math.max(0, Math.min(255, img.data[i+2] + n));
+  }
+  cx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+//==================================================================
+// 弯曲峡谷地形（跟随河流路径 + 宽窄变化 + 瀑布落差）
+//==================================================================
+function terrainHeight(x, z) {
+  const cx = riverCenterX(z);
+  const hw = riverHalfWidth(z);
+  const distFromRiver = Math.abs(x - cx) - hw;
+  const d = Math.max(0, distFromRiver);
+  let h = 0;
+  h += Math.min(d * d * 0.04, 14);
+  h += Math.sin(z * 0.015) * Math.min(d * 0.3, 1.0);
+  // 瀑布落差——地形在瀑布后方下降
+  h -= waterfallHeightOffset(z);
+  return h;
+}
+
+function createCanyonTerrain() {
+  const len = 600, segs = 400, wid = 80, wSegs = 20; // segs 150→400: 瀑布落差区平滑
+  const overlap = 4; // 地形延伸进河道内部的量，确保与水面重叠无缝隙
+  const positions = [], uvs = [], colors = [], indices = [];
+  for (let i = 0; i <= segs; i++) {
+    for (let j = 0; j <= wSegs; j++) {
+      const z = (i / segs) * len - len / 2;
+      // 左岸——从河道内部(overlap)开始，向外延伸到 wid
+      const leftX = riverCenterX(z) - riverHalfWidth(z) + overlap - (j / wSegs) * (wid + overlap);
+      let leftY;
+      if (j === 0) {
+        // 河岸内边缘：下沉到水面以下，形成河岸壁（加上瀑布落差）
+        leftY = -1.5 - waterfallHeightOffset(z);
+      } else {
+        leftY = terrainHeight(leftX, z);
+      }
+      positions.push(leftX, leftY, z);
+      uvs.push((j / wSegs) * 3, (i / segs) * 10);
+      // 河岸边缘（低Y）用草地色，高处用岩石色，中间平滑过渡
+      const grass = Math.min(1, Math.max(0.3, (leftY + 1) / 6));
+      const rock = 1 - grass;
+      colors.push(0.40*rock+0.45*grass, 0.34*rock+0.65*grass, 0.26*rock+0.20*grass);
+    }
+  }
+  for (let i = 0; i < segs; i++) {
+    for (let j = 0; j < wSegs; j++) {
+      const a = i * (wSegs + 1) + j;
+      const b = a + 1, c = a + (wSegs + 1), d = c + 1;
+      indices.push(a, c, b, b, c, d);
+    }
+  }
+  // 右岸
+  const baseIdx = positions.length / 3;
+  for (let i = 0; i <= segs; i++) {
+    for (let j = 0; j <= wSegs; j++) {
+      const z = (i / segs) * len - len / 2;
+      const rightX = riverCenterX(z) + riverHalfWidth(z) - overlap + (j / wSegs) * (wid + overlap);
+      let rightY;
+      if (j === 0) {
+        rightY = -1.5 - waterfallHeightOffset(z);
+      } else {
+        rightY = terrainHeight(rightX, z);
+      }
+      positions.push(rightX, rightY, z);
+      uvs.push((j / wSegs) * 3, (i / segs) * 10);
+      const grass = Math.min(1, Math.max(0.3, (rightY + 1) / 6));
+      const rock = 1 - grass;
+      colors.push(0.40*rock+0.45*grass, 0.34*rock+0.65*grass, 0.26*rock+0.20*grass);
+    }
+  }
+  for (let i = 0; i < segs; i++) {
+    for (let j = 0; j < wSegs; j++) {
+      const a = baseIdx + i * (wSegs + 1) + j;
+      const b = a + 1, c = a + (wSegs + 1), d = c + 1;
+      indices.push(a, b, c, b, d, c);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({
+    vertexColors: true, roughness: 0.98, metalness: 0.0,
+    map: grassTex, normalMap: rockNormal.clone(),
+    normalScale: new THREE.Vector2(0.3, 0.3),
+    envMapIntensity: 0.15,
+    side: THREE.DoubleSide, // 双面渲染，防止从侧面看穿
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.receiveShadow = true;
+  mesh.userData.terrainSegments = { len, segs, wid, wSegs };
+  return mesh;
+}
+const canyonTerrain = createCanyonTerrain();
+scene.add(canyonTerrain);
+
+//==================================================================
+// 瀑布视觉效果（粒子帘幕 + 岩壁）
+//==================================================================
+const waterfalls = [];
+function createWaterfalls() {
+  // 为每个瀑布位置创建水帘粒子 + 水雾
+  // 瀑布位置由 waterfallZList 控制（随世界滚动）
+  // 这里只创建粒子组，位置在 update 中每帧设置
+  for (let i = 0; i < waterfallZList.length; i++) {
+    const wfZ = waterfallZList[i];
+    const wfTopY = 0; // 瀑布顶部水面高度
+    const wfBotY = -WATERFALL_DROP; // 瀑布底部水面高度
+
+    // 水帘粒子
+    const wfParticleCount = 400;
+    const wfPos = new Float32Array(wfParticleCount * 3);
+    const wfVel = new Float32Array(wfParticleCount * 3);
+    for (let j = 0; j < wfParticleCount; j++) {
+      wfPos[j*3] = (Math.random()-0.5) * 10;
+      wfPos[j*3+1] = wfTopY + Math.random() * WATERFALL_DROP;
+      wfPos[j*3+2] = wfZ + (Math.random()-0.5) * WATERFALL_HALF_WIDTH;
+      wfVel[j*3] = (Math.random()-0.5) * 0.3;
+      wfVel[j*3+1] = -12 - Math.random() * 8;
+      wfVel[j*3+2] = (Math.random()-0.5) * 0.3;
+    }
+    const wfGeo = new THREE.BufferGeometry();
+    wfGeo.setAttribute('position', new THREE.BufferAttribute(wfPos, 3));
+    const wfMat = new THREE.PointsMaterial({
+      color: 0xa8cfe8, size: 0.26, transparent: true, opacity: 0.35,
+      depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true,
+    });
+    const wfPoints = new THREE.Points(wfGeo, wfMat);
+    wfPoints.frustumCulled = false;
+    wfPoints.userData = { vel: wfVel, idx: i, count: wfParticleCount, wfTopY, wfBotY };
+    scene.add(wfPoints);
+    waterfalls.push(wfPoints);
+
+    // 落水水花——只在底部(水砸到下面水面的位置)，向上弹跳+重力
+    // 调小：之前的白色粒子云在筏子过瀑布时会挡住橡皮筏
+    const splashCount = 110;
+    const spPos = new Float32Array(splashCount * 3);
+    const spVel = new Float32Array(splashCount * 3);
+    for (let j = 0; j < splashCount; j++) {
+      spPos[j*3] = (Math.random()-0.5) * 10;
+      spPos[j*3+1] = wfBotY + Math.random() * 0.4;
+      spPos[j*3+2] = wfZ + (Math.random()-0.5) * 4;
+      spVel[j*3] = (Math.random()-0.5) * 1.2;
+      spVel[j*3+1] = 1 + Math.random() * 2;
+      spVel[j*3+2] = (Math.random()-0.5) * 1.2;
+    }
+    const spGeo = new THREE.BufferGeometry();
+    spGeo.setAttribute('position', new THREE.BufferAttribute(spPos, 3));
+    const splash = new THREE.Points(spGeo, new THREE.PointsMaterial({
+      color: 0xffffff, size: 0.18, transparent: true, opacity: 0.65,
+      depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true,
+    }));
+    splash.frustumCulled = false;
+    splash.userData = { vel: spVel, idx: i, count: splashCount, wfBotY, splash: true };
+    scene.add(splash);
+    waterfalls.push(splash);
+
+    // 水雾——调小(size 3的白色大雾团曾挡住过瀑布的橡皮筏)
+    const mistCount = 80;
+    const mistPos = new Float32Array(mistCount * 3);
+    for (let j = 0; j < mistCount; j++) {
+      mistPos[j*3] = (Math.random()-0.5) * 10;
+      mistPos[j*3+1] = wfBotY + Math.random() * 2.5;
+      mistPos[j*3+2] = wfZ - WATERFALL_HALF_WIDTH + Math.random() * 6;
+    }
+    const mistGeo = new THREE.BufferGeometry();
+    mistGeo.setAttribute('position', new THREE.BufferAttribute(mistPos, 3));
+    const mistMat = new THREE.PointsMaterial({
+      color: 0xffffff, size: 1.2, transparent: true, opacity: 0.18,
+      depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true,
+    });
+    const mist = new THREE.Points(mistGeo, mistMat);
+    mist.frustumCulled = false;
+    mist.userData = { idx: i, count: mistCount, wfBotY };
+    scene.add(mist);
+    waterfalls.push(mist);
+  }
+
+  // 瀑布岩壁——已删除棕色盒子(地形自身落差+绿色顶面已构成峡谷壁, 盒子纯视觉噪音)
+
+  // 瀑布水帘——已删除: 0x2a6a8a暗蓝灰半透明大平面=用户看到的'灰黑色遮罩'
+  // (落差视觉由水面斜坡+落水水花+水雾承担)
+}
+createWaterfalls();
+
+//==================================================================
+// 植被
+//==================================================================
+// 预加载 Quaternius 风格化自然模型
+const natureModels = {};
+const natureLoader = new GLTFLoader();
+const NATURE_FILES = [
+  'CommonTree_1', 'CommonTree_2', 'CommonTree_3',
+  'PineTree_1', 'PineTree_2',
+  'PalmTree_1', 'PalmTree_2',
+  'BirchTree_1', 'BirchTree_2',
+  'Bush_1', 'Bush_2', 'BushBerries_1',
+  'Rock_1', 'Rock_2', 'Rock_Moss_1', 'Rock_Moss_2',
+  'Grass', 'Grass_2', 'Grass_Short',
+  'Flowers', 'Plant_1', 'Plant_2',
+  'TreeStump', 'TreeStump_Moss',
+  'WoodLog', 'WoodLog_Moss', 'Lilypad',
+];
+let natureLoaded = 0;
+const natureTotal = NATURE_FILES.length;
+
+function loadNatureModels() {
+  const promises = [];
+  for (const name of NATURE_FILES) {
+    promises.push(new Promise((resolve) => {
+      natureLoader.load(
+        `assets/models/nature/${name}.glb`,
+        (gltf) => {
+          const model = gltf.scene;
+          model.traverse(o => {
+            if (o.isMesh) {
+              o.castShadow = true; o.receiveShadow = true;
+              if (o.material) {
+                o.material.envMapIntensity = 0; // 关掉环境光反射
+                o.material.roughness = 1.0; // 完全哑光
+                // 提亮绿色：如果材质有颜色，向嫩绿偏移
+                const col = o.material.color;
+                if (col) {
+                  const r = col.r, g = col.g, b = col.b;
+                  // 判断是否偏绿（g > r 且 g > b）
+                  if (g > r && g > b) {
+                    // 提亮：增加G，减少B，适度增加R
+                    col.r = Math.min(1, r * 1.3 + 0.05);
+                    col.g = Math.min(1, g * 1.15 + 0.1);
+                    col.b = Math.min(1, b * 0.7);
+                  }
+                }
+              }
+            }
+          });
+          natureModels[name] = model;
+          natureLoaded++;
+          resolve();
+        },
+        undefined,
+        (err) => { console.warn(`Failed to load ${name}.glb`, err); natureLoaded++; resolve(); }
+      );
+    }));
+  }
+  return Promise.all(promises);
+}
+
+function cloneNature(name) {
+  const src = natureModels[name];
+  if (!src) return null;
+  const c = src.clone(true);
+  c.userData.natureName = name; // 记录模型名，供障碍物区分 WoodLog/TreeStump
+  c.traverse(o => {
+    if (o.isMesh) {
+      o.castShadow = true; o.receiveShadow = true;
+      if (o.material) {
+        o.material.envMapIntensity = 0;
+        const col = o.material.color;
+        if (col) {
+          const r = col.r, g = col.g, b = col.b;
+          if (g > r && g > b) {
+            col.r = Math.min(1, r * 1.3 + 0.05);
+            col.g = Math.min(1, g * 1.15 + 0.1);
+            col.b = Math.min(1, b * 0.7);
+          }
+        }
+      }
+    }
+  });
+  return c;
+}
+function randomNature(category) {
+  let pool;
+  if (category === 'tree') pool = ['CommonTree_1','CommonTree_2','CommonTree_3','PineTree_1','PineTree_2','PalmTree_1','PalmTree_2','BirchTree_1','BirchTree_2'];
+  else if (category === 'bush') pool = ['Bush_1','Bush_2','BushBerries_1','Plant_1','Plant_2','Flowers'];
+  else if (category === 'flower') pool = ['Flowers','Flowers','Plant_1','Plant_2'];
+  else if (category === 'grass') pool = ['Grass','Grass_2','Grass_Short'];
+  else if (category === 'rock') pool = ['Rock_1','Rock_2','Rock_Moss_1','Rock_Moss_2'];
+  else if (category === 'log') pool = ['WoodLog','WoodLog_Moss','TreeStump','TreeStump_Moss'];
+  else if (category === 'lilypad') pool = ['Lilypad'];
+  else pool = ['Plant_1','Plant_2','Flowers','Grass'];
+  // 过滤掉还没加载完的
+  pool = pool.filter(n => natureModels[n]);
+  if (pool.length === 0) return null;
+  return cloneNature(pool[Math.floor(Math.random() * pool.length)]);
+}
+
+const vegObjects = [];
+function placeVegetation() {
+  // 第一批：远处的树木（稀疏大树）
+  for (let i = 0; i < 120; i++) {
+    const r = Math.random();
+    const cat = r < 0.3 ? 'tree' : r < 0.6 ? 'tree' : r < 0.85 ? 'bush' : 'grass';
+    let veg = randomNature(cat);
+    if (!veg) continue; // GLB加载完才放，不需要fallback
+    const side = i % 2 === 0 ? -1 : 1;
+    const baseZ = -290 + (i / 120) * 580 + (Math.random()-0.5) * 5;
+    const xOff = 0.5 + Math.random() * 12;
+    const cx = riverCenterX(baseZ);
+    const hw = riverHalfWidth(baseZ);
+    const x = cx + side * (hw + xOff);
+    const y = terrainHeight(x, baseZ);
+    const s = (0.7 + Math.random() * 0.6) * 1.95;
+    veg.position.set(x, y, baseZ);
+    veg.scale.setScalar(s);
+    veg.rotation.y = Math.random() * Math.PI * 2;
+    veg.userData = { baseZ, side, xOff };
+    scene.add(veg);
+    vegObjects.push(veg);
+  }
+  // 第二批：河岸边缘植被（稀疏）
+  for (let i = 0; i < 120; i++) {
+    const r = Math.random();
+    const cat = r < 0.4 ? 'bush' : r < 0.7 ? 'grass' : 'tree';
+    let veg = randomNature(cat);
+    if (!veg) continue;
+    const side = i % 2 === 0 ? -1 : 1;
+    const baseZ = -290 + Math.random() * 580;
+    const xOff = 0.3 + Math.random() * 4;
+    const cx = riverCenterX(baseZ);
+    const hw = riverHalfWidth(baseZ);
+    const x = cx + side * (hw + xOff);
+    const y = terrainHeight(x, baseZ);
+    const s = (0.6 + Math.random() * 0.5) * 1.95;
+    veg.position.set(x, y, baseZ);
+    veg.scale.setScalar(s);
+    veg.rotation.y = Math.random() * Math.PI * 2;
+    veg.userData = { baseZ, side, xOff };
+    scene.add(veg);
+    vegObjects.push(veg);
+  }
+  // 河岸边缘花朵
+  for (let i = 0; i < 80; i++) {
+    let flower = randomNature('flower');
+    if (!flower) continue;
+    const side = i % 2 === 0 ? -1 : 1;
+    const baseZ = -290 + Math.random() * 580;
+    const xOff = 0.2 + Math.random() * 3;
+    const cx = riverCenterX(baseZ);
+    const hw = riverHalfWidth(baseZ);
+    const x = cx + side * (hw + xOff);
+    const y = terrainHeight(x, baseZ);
+    flower.position.set(x, y, baseZ);
+    flower.scale.setScalar((0.8 + Math.random() * 0.4) * 1.5);
+    flower.rotation.y = Math.random() * Math.PI * 2;
+    flower.userData = { baseZ, side, xOff };
+    scene.add(flower);
+    vegObjects.push(flower);
+  }
+  // 河岸岩石
+  for (let i = 0; i < 70; i++) {
+    let rock = randomNature('rock');
+    if (!rock) {
+      const rg = new THREE.IcosahedronGeometry(0.5+Math.random()*0.8, 0);
+      const pos = rg.attributes.position;
+      for (let j = 0; j < pos.count; j++) {
+        pos.setXYZ(j, pos.getX(j)+(Math.random()-0.5)*0.2, pos.getY(j)+(Math.random()-0.5)*0.2, pos.getZ(j)+(Math.random()-0.5)*0.2);
+      }
+      rg.computeVertexNormals();
+      rock = new THREE.Mesh(rg, new THREE.MeshStandardMaterial({ color: 0x6a7080, roughness: 0.85, flatShading: true }));
+    }
+    const side = i % 2 === 0 ? -1 : 1;
+    const baseZ = -290 + Math.random() * 580;
+    const xOff = Math.random() * 2;
+    const cx = riverCenterX(baseZ);
+    const hw = riverHalfWidth(baseZ);
+    const x = cx + side * (hw + xOff);
+    rock.position.set(x, 0.2+Math.random()*0.3, baseZ);
+    rock.rotation.set(Math.random(), Math.random(), Math.random());
+    rock.scale.setScalar(0.8+Math.random()*0.6);
+    rock.castShadow = true; rock.receiveShadow = true;
+    rock.userData = { baseZ, side, xOff };
+    scene.add(rock);
+    vegObjects.push(rock);
+  }
+  // 水面睡莲（少量）
+  for (let i = 0; i < 30; i++) {
+    let lily = randomNature('lilypad');
+    if (!lily) continue;
+    const baseZ = -290 + Math.random() * 580;
+    const cx = riverCenterX(baseZ);
+    const hw = riverHalfWidth(baseZ);
+    const x = cx + (Math.random()*2-1) * (hw - 1.5);
+    lily.position.set(x, 0.05, baseZ);
+    lily.scale.setScalar(0.6 + Math.random() * 0.5);
+    lily.rotation.y = Math.random() * Math.PI * 2;
+    lily.userData = { baseZ, side: 0, xOff: (Math.random()*2-1) };
+    scene.add(lily);
+    vegObjects.push(lily);
+  }
+}
+
+// 等GLB全部加载完再放植被
+loadNatureModels().then(() => {
+  placeVegetation();
+});
+
+//==================================================================
+// 圆形橡皮筏（TorusGeometry — 原版风格的圆形充气筏）
+//==================================================================
+function createRaft() {
+  const g = new THREE.Group();
+  // 橡皮材质：哑光+轻微高光=充气橡胶质感
+  const tubeMat = new THREE.MeshStandardMaterial({ color: 0xffdd00, roughness: 0, metalness: 0.0, envMapIntensity: 2.0 });
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0xeec800, roughness: 0, metalness: 0.0, envMapIntensity: 1.5 });
+  const highlightMat = new THREE.MeshStandardMaterial({ color: 0xffe840, roughness: 0, metalness: 0.0, envMapIntensity: 2.0 });
+  const strapMat = new THREE.MeshStandardMaterial({ color: 0xb89000, roughness: 0, metalness: 0.0, envMapIntensity: 1.0 });
+
+  // 外圈充气环——增加分段数让表面更圆滑
+  const tube = new THREE.Mesh(new THREE.TorusGeometry(2.0, 0.45, 24, 48), tubeMat);
+  tube.position.y = 0.45;
+  tube.rotation.x = Math.PI / 2;
+  tube.castShadow = true; tube.receiveShadow = false;
+  g.add(tube);
+
+  // 高光环（内圈细管）
+  const highlight = new THREE.Mesh(new THREE.TorusGeometry(2.0, 0.1, 16, 48), highlightMat);
+  highlight.position.y = 0.75;
+  highlight.rotation.x = Math.PI / 2;
+  g.add(highlight);
+
+  // 底板（橡皮底——薄圆盘）
+  const floor = new THREE.Mesh(new THREE.CylinderGeometry(1.95, 1.95, 0.08, 32), floorMat);
+  floor.position.y = 0.08;
+  floor.castShadow = true; floor.receiveShadow = false;
+  g.add(floor);
+
+  // 桨（两侧）
+  const paddleMat = new THREE.MeshStandardMaterial({ map: barkTexBroad, roughness: 0.8 });
+  // 两侧把手
+  const handleMat = tubeMat.clone();
+  const handleL = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.08, 12, 24), handleMat);
+  handleL.position.set(-2.1, 0.55, 0); handleL.rotation.x = Math.PI / 2; handleL.castShadow = true; g.add(handleL);
+  const handleR = handleL.clone(); handleR.position.x = 2.1; g.add(handleR);
+
+  g.userData = { handleL, handleR };
+  return g;
+}
+const raft = createRaft();
+scene.add(raft);
+// C1 船尾V形尾迹——两条白色渐隐水线，随速度变长变浓
+const wakeTex = (() => {
+  const c = document.createElement('canvas'); c.width = 64; c.height = 256;
+  const cx = c.getContext('2d');
+  const g = cx.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0, 'rgba(255,255,255,0.9)');
+  g.addColorStop(0.5, 'rgba(255,255,255,0.45)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  cx.fillStyle = g; cx.fillRect(0, 0, 64, 256);
+  // 横向中心软边
+  cx.globalCompositeOperation = 'destination-in';
+  const gh = cx.createLinearGradient(0, 0, 64, 0);
+  gh.addColorStop(0, 'rgba(0,0,0,0)');
+  gh.addColorStop(0.5, 'rgba(0,0,0,1)');
+  gh.addColorStop(1, 'rgba(0,0,0,0)');
+  cx.fillStyle = gh; cx.fillRect(0, 0, 64, 256);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+const wakeGeo = new THREE.PlaneGeometry(0.5, 1);
+wakeGeo.translate(0, 0.5, 0); // 锚点在船尾端
+const wakeMatL = new THREE.MeshBasicMaterial({ map: wakeTex, transparent: true, opacity: 0.2, depthWrite: false, fog: false });
+const wakeL = new THREE.Mesh(wakeGeo, wakeMatL);
+wakeL.rotation.x = Math.PI / 2;      // 平躺
+wakeL.rotation.z = 0.28;             // 向左发散
+wakeL.position.set(-1.1, 0.06, 0.8);
+const wakeR = new THREE.Mesh(wakeGeo, wakeMatL.clone());
+wakeR.rotation.x = Math.PI / 2;
+wakeR.rotation.z = -0.28;
+wakeR.position.set(1.1, 0.06, 0.8);
+raft.add(wakeL); raft.add(wakeR);
+// A1 护盾气泡
+const shieldBubble = new THREE.Mesh(
+  new THREE.SphereGeometry(2.9, 20, 14),
+  new THREE.MeshBasicMaterial({ color: 0x44ddff, transparent: true, opacity: 0.14, blending: THREE.AdditiveBlending, depthWrite: false })
+);
+shieldBubble.position.y = 0.8;
+shieldBubble.visible = false;
+raft.add(shieldBubble);
+const raftState = { x: 0, targetX: 0, y: 0, vy: 0, onWater: true, tilt: 0, bounceT: 0, waterfallFx: 0 };
+
+// C4 飞鸟群——V字形编队飞过天空
+const birdFlocks = [];
+let birdTimer = 12;
+function makeBird() {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color: 0x2a3242, side: THREE.DoubleSide, fog: false });
+  const body = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.55, 4), mat);
+  body.rotation.x = Math.PI / 2;
+  g.add(body);
+  const wingGeo = new THREE.PlaneGeometry(0.55, 0.22);
+  const wl = new THREE.Mesh(wingGeo, mat);
+  wl.position.x = -0.3;
+  const wr = new THREE.Mesh(wingGeo, mat);
+  wr.position.x = 0.3;
+  g.add(wl); g.add(wr);
+  g.userData.wings = [wl, wr];
+  return g;
+}
+function spawnBirdFlock() {
+  const dir = Math.random() < 0.5 ? 1 : -1;
+  const flock = new THREE.Group();
+  const n = 5 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < n; i++) {
+    const b = makeBird();
+    // V字编队：领头在前，其余交替排在后侧方
+    const row = Math.ceil(i / 2);
+    const side = i === 0 ? 0 : (i % 2 === 0 ? 1 : -1);
+    b.position.set(side * row * 1.6, 0, row * 1.2);
+    b.userData.flapPhase = Math.random() * Math.PI * 2; // 属性赋值，不覆盖wings
+    flock.add(b);
+  }
+  flock.position.set(-dir * 120, 10 + Math.random() * 6, -35 - Math.random() * 20);
+  flock.scale.setScalar(1.8); // 放大可见度
+  flock.userData = { dir, speed: 9 + Math.random() * 4, baseZ: flock.position.z };
+  scene.add(flock);
+  birdFlocks.push(flock);
+}
+
+// C4 蜻蜓——贴水飞舞的常驻小生命
+const dragonflies = [];
+function makeDragonfly() {
+  const g = new THREE.Group();
+  // 红蜻蜓配色(赤蜻): 亮红身体+深红头部，无对应GLB模型(库中仅树/石/植物)
+  const bodyMat = new THREE.MeshBasicMaterial({ color: 0xd8302a });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.35, 5), bodyMat);
+  body.rotation.x = Math.PI / 2;
+  g.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), new THREE.MeshBasicMaterial({ color: 0x8a1410 }));
+  head.position.z = 0.19;
+  g.add(head);
+  const wingMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, side: THREE.DoubleSide, fog: false });
+  const wingGeo = new THREE.PlaneGeometry(0.28, 0.08);
+  const w1 = new THREE.Mesh(wingGeo, wingMat); w1.position.set(0.13, 0.03, 0.05);
+  const w2 = new THREE.Mesh(wingGeo, wingMat); w2.position.set(-0.13, 0.03, 0.05);
+  const w3 = new THREE.Mesh(wingGeo, wingMat); w3.position.set(0.13, 0.03, -0.05);
+  const w4 = new THREE.Mesh(wingGeo, wingMat); w4.position.set(-0.13, 0.03, -0.05);
+  g.add(w1); g.add(w2); g.add(w3); g.add(w4);
+  g.userData.wings = [w1, w2, w3, w4];
+  return g;
+}
+for (let i = 0; i < 4; i++) {
+  const d = makeDragonfly();
+  d.position.set((Math.random() - 0.5) * 14, 0.8 + Math.random() * 0.8, -8 + Math.random() * 12);
+  // 修复(上次黑屏根因): 展开保留wings，不再整体覆盖userData
+  d.userData = { ...d.userData, anchorX: d.position.x, anchorZ: d.position.z, phase: Math.random() * Math.PI * 2, wander: Math.random() * Math.PI * 2 };
+  scene.add(d);
+  dragonflies.push(d);
+}
+
+//==================================================================
+// 角色（GLB 3D 模型 —— Quaternius Formal Woman + Xbot 动画重映射）
+//==================================================================
+let characterModel = null;
+let mixer = null;
+let currentAction = null;
+let charBones = {}; // 所有关键骨骼引用
+const PADDLE_AXIS = new THREE.Vector3(1, 0, 0); // C6 划桨摆动轴
+const _strokeQ = new THREE.Quaternion();
+let armTrackingEnabled = true; // 体感手臂追踪开关（调试用）
+const loadingMgr = { items: { model:false, pose:false }, done:false, check() {
+  if (Object.values(this.items).every(v=>v) && !this.done) {
+    this.done = true; gameState = ST.READY; startBtn.disabled = false;
+    startBtn.innerHTML = '开始游戏 🚣'; loadingPct.textContent = '准备就绪！';
+  }
+}};
+
+// Mixamo骨骼名 → Quaternius骨骼名 映射表
+// 注意：浏览器加载GLB后骨骼名的点号被去掉（UpperArm.L → UpperArmL）
+const BONE_REMAP = {
+  'mixamorig:Hips': 'Hips',
+  'mixamorig:LeftUpLeg': 'UpperLegL',
+  'mixamorig:RightUpLeg': 'UpperLegR',
+  'mixamorig:LeftLeg': 'LowerLegL',
+  'mixamorig:RightLeg': 'LowerLegR',
+  'mixamorig:LeftFoot': 'FootL',
+  'mixamorig:RightFoot': 'FootR',
+  'mixamorig:Spine': 'Torso',
+  'mixamorig:Spine1': 'Abdomen',
+  'mixamorig:Spine2': 'Chest',
+  'mixamorig:LeftShoulder': 'ShoulderL',
+  'mixamorig:RightShoulder': 'ShoulderR',
+  'mixamorig:LeftArm': 'UpperArmL',
+  'mixamorig:RightArm': 'UpperArmR',
+  'mixamorig:LeftForeArm': 'LowerArmL',
+  'mixamorig:RightForeArm': 'LowerArmR',
+  'mixamorig:LeftHand': 'HandL',
+  'mixamorig:RightHand': 'HandR',
+  'mixamorig:Neck': 'Neck',
+  'mixamorig:Head': 'Head',
+  'mixamorig:LeftHandThumb1': 'Thumb1L', 'mixamorig:LeftHandThumb2': 'Thumb2L', 'mixamorig:LeftHandThumb3': 'Thumb3L',
+  'mixamorig:RightHandThumb1': 'Thumb1R', 'mixamorig:RightHandThumb2': 'Thumb2R', 'mixamorig:RightHandThumb3': 'Thumb3R',
+  'mixamorig:LeftHandIndex1': 'Index1L', 'mixamorig:LeftHandIndex2': 'Index2L', 'mixamorig:LeftHandIndex3': 'Index3L',
+  'mixamorig:RightHandIndex1': 'Index1R', 'mixamorig:RightHandIndex2': 'Index2R', 'mixamorig:RightHandIndex3': 'Index3R',
+  'mixamorig:LeftHandMiddle1': 'Middle1L', 'mixamorig:LeftHandMiddle2': 'Middle2L', 'mixamorig:LeftHandMiddle3': 'Middle3L',
+  'mixamorig:RightHandMiddle1': 'Middle1R', 'mixamorig:RightHandMiddle2': 'Middle2R', 'mixamorig:RightHandMiddle3': 'Middle3R',
+  'mixamorig:LeftHandRing1': 'Ring1L', 'mixamorig:LeftHandRing2': 'Ring2L', 'mixamorig:LeftHandRing3': 'Ring3L',
+  'mixamorig:RightHandRing1': 'Ring1R', 'mixamorig:RightHandRing2': 'Ring2R', 'mixamorig:RightHandRing3': 'Ring3R',
+  'mixamorig:LeftHandPinky1': 'Pinky1L', 'mixamorig:LeftHandPinky2': 'Pinky2L', 'mixamorig:LeftHandPinky3': 'Pinky3L',
+  'mixamorig:RightHandPinky1': 'Pinky1R', 'mixamorig:RightHandPinky2': 'Pinky2R', 'mixamorig:RightHandPinky3': 'Pinky3R',
+};
+
+// 重映射动画 clip 的 track 名称
+function remapAnimationClip(clip) {
+  const newTracks = [];
+  let matched = 0, skipped = 0;
+  for (const track of clip.tracks) {
+    const dotIdx = track.name.lastIndexOf('.');
+    if (dotIdx < 0) { newTracks.push(track); continue; }
+    let boneName = track.name.substring(0, dotIdx);
+    const property = track.name.substring(dotIdx);
+    // FBX track names may use 'mixamo.com::BoneName' or 'mixamo.com:BoneName' or 'mixamorig:BoneName'
+    // Normalize: strip any prefix before '::' or known prefixes
+    if (boneName.startsWith('mixamo.com::')) boneName = boneName.substring(12);
+    else if (boneName.startsWith('mixamo.com:')) boneName = boneName.substring(11);
+    else if (boneName.startsWith('mixamorig:')) boneName = boneName.substring(10);
+    const newName = BONE_REMAP[boneName] || BONE_REMAP['mixamorig:' + boneName];
+    if (newName) {
+      const newTrack = track.clone();
+      newTrack.name = newName + property;
+      newTracks.push(newTrack);
+      matched++;
+    } else {
+      if (skipped < 3) console.log(`  Remap skip: "${track.name}" → boneName="${boneName}"`);
+      skipped++;
+    }
+  }
+  console.log(`Remap ${clip.name}: ${matched} matched, ${skipped} skipped, ${newTracks.length} total`);
+  return new THREE.AnimationClip(clip.name, clip.duration, newTracks, clip.blendMode);
+}
+
+// 加载 FBX 角色模型（自带Idle动画），再加载StandingJump动画
+const fbxLoader = new FBXLoader();
+fbxLoader.load('assets/models/animations/Ch46_nonPBR@Idle.fbx', (obj) => {
+  characterModel = obj;
+  characterModel.scale.setScalar(0.0144);
+  characterModel.position.set(0, 0.15, -0.3);
+  characterModel.rotation.y = Math.PI; // 背向相机
+
+  // 开启阴影 + 修复材质
+  characterModel.traverse(o => {
+    if (o.isMesh) {
+      o.castShadow = true;
+      o.receiveShadow = true;
+      // nonPBR 材质转成 MeshStandardMaterial
+      if (o.material) {
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        for (const mat of mats) {
+          if (mat.isMeshPhongMaterial || mat.isMeshLambertMaterial) {
+            const oldMat = mat;
+            const newMat = new THREE.MeshStandardMaterial({
+              map: oldMat.map || null,
+              color: oldMat.color ? oldMat.color.clone().multiplyScalar(4.0) : new THREE.Color(0xffffff),
+              roughness: 1.0,
+              metalness: 0.0,
+              envMapIntensity: 0.3,
+            });
+            o.material = newMat;
+          }
+        }
+      }
+    }
+  });
+
+  // 查找骨骼（用于身体倾斜）
+  characterModel.traverse(o => {
+    if (o.isBone) charBones[o.name] = o;
+    if (o.isSkinnedMesh && o.skeleton) {
+      for (const bone of o.skeleton.bones) {
+        if (!charBones[bone.name]) charBones[bone.name] = bone;
+      }
+    }
+  });
+  console.log('FBX character bones:', Object.keys(charBones).join(', '));
+
+  // 初始化 mixer，播放 Idle 动画
+  // FBX 可能包含多个 clip，选 tracks 最多的那个（跳过空 Take 001）
+  mixer = new THREE.AnimationMixer(characterModel);
+  const clips = {};
+  if (obj.animations && obj.animations.length > 0) {
+    let bestClip = obj.animations[0];
+    for (const clip of obj.animations) {
+      if (clip.tracks.length > bestClip.tracks.length) bestClip = clip;
+    }
+    clips['idle'] = mixer.clipAction(bestClip);
+    currentAction = clips['idle'];
+    currentAction.play();
+    console.log('Idle animation playing:', bestClip.name, 'tracks:', bestClip.tracks.length);
+  }
+
+  // 加载 StandingJump 动画
+  fbxLoader.load('assets/models/animations/Ch46_nonPBR@StandingJump.fbx', (jumpObj) => {
+    if (jumpObj.animations && jumpObj.animations.length > 0) {
+      // 同样选 tracks 最多的 clip
+      let bestJump = jumpObj.animations[0];
+      for (const clip of jumpObj.animations) {
+        if (clip.tracks.length > bestJump.tracks.length) bestJump = clip;
+      }
+      clips['jumping'] = mixer.clipAction(bestJump);
+      clips['jumping'].setLoop(THREE.LoopOnce, 1); // 跳跃只播放一次
+      clips['jumping'].clampWhenFinished = true;
+      console.log('Jump animation loaded:', bestJump.name, 'tracks:', bestJump.tracks.length);
+    }
+    characterModel.userData.clips = clips;
+    loadingMgr.items.model = true; loadingMgr.check();
+  }, undefined, (err) => {
+    console.error('Jump FBX load error', err);
+    characterModel.userData.clips = clips;
+    loadingMgr.items.model = true; loadingMgr.check();
+  });
+
+  // 如果 jump 加载较慢，先标记 clips
+  characterModel.userData.clips = clips;
+  raft.add(characterModel);
+}, undefined, (err) => {
+  console.error('Character FBX load error', err);
+  loadingMgr.items.model = true; loadingMgr.check();
+});
+
+// 切换动画
+function switchAnim(name) {
+  if (!characterModel || !characterModel.userData.clips) return;
+  const clips = characterModel.userData.clips;
+  const next = clips[name];
+  if (!next || next === currentAction) return;
+  currentAction?.fadeOut(0.2);
+  next.reset().fadeIn(0.2).play();
+  currentAction = next;
+}
+
+//==================================================================
+// 游戏对象工厂
+//==================================================================
+let gameObjects = [];
+// 预加载 GLB 模型缓存
+const glbCache = {};
+function loadGLB(path) {
+  return new Promise((resolve) => {
+    if (glbCache[path]) { resolve(glbCache[path].clone(true)); return; }
+    natureLoader.load(path, (gltf) => {
+      glbCache[path] = gltf.scene;
+      resolve(gltf.scene.clone(true));
+    }, undefined, () => resolve(null));
+  });
+}
+
+function createRockObstacle() {
+  // 优先用 Quaternius GLB 岩石模型
+  const glbRock = randomNature('rock');
+  if (glbRock) {
+    glbRock.scale.setScalar(2.5); // 实测模型仅0.5单位宽，放大到可见
+    // 原模型本色RGB(0.20,0.21,0.24)极暗蓝灰+浸在水中≈隐形 → 强制亮灰+自发光
+    glbRock.traverse(o => {
+      if (o.isMesh && o.material) {
+        o.material.color = new THREE.Color(0xb8bec8);
+        o.material.emissive = new THREE.Color(0x3a4048);
+        o.material.emissiveIntensity = 0.5;
+        o.material.metalness = 0;
+        o.material.needsUpdate = true;
+      }
+    });
+    return glbRock;
+  }
+  // 后备：程序化多面体
+  const geo = new THREE.IcosahedronGeometry(1.2, 1);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    pos.setXYZ(i, pos.getX(i)+(Math.random()-0.5)*0.4, pos.getY(i)+(Math.random()-0.5)*0.4, pos.getZ(i)+(Math.random()-0.5)*0.4);
+  }
+  geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x4a5a6a, roughness: 0.8, metalness: 0.05, flatShading: true }));
+  m.castShadow = true; return m;
+}
+function createLogObstacle() {
+  // 优先用 Quaternius GLB 木头模型
+  const glbLog = randomNature('log');
+  if (glbLog) {
+    glbLog.scale.setScalar(2.0); // 放大到可见
+    // WoodLog长轴是Y(竖直立着像杆子)，横放成真正横在河面的木头
+    if ((glbLog.userData.natureName || '').includes('WoodLog')) {
+      glbLog.rotation.z = Math.PI / 2;
+      glbLog.position.y = 0.3;
+    }
+    // 原模型深棕色+浸水难辨认 → 强制亮棕+自发光
+    glbLog.traverse(o => {
+      if (o.isMesh && o.material) {
+        o.material.color = new THREE.Color(0xc08040);
+        o.material.emissive = new THREE.Color(0x40260e);
+        o.material.emissiveIntensity = 0.5;
+        o.material.metalness = 0;
+        o.material.needsUpdate = true;
+      }
+    });
+    return glbLog;
+  }
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x6a4a30, roughness: 0.85, metalness: 0.05 });
+  const log = new THREE.Mesh(new THREE.CylinderGeometry(0.6,0.6,3.8,12), mat);
+  log.rotation.z = Math.PI/2; log.castShadow = true; g.add(log);
+  const capMat = new THREE.MeshStandardMaterial({ color: 0x8a6a40, roughness: 0.7 });
+  const capL = new THREE.Mesh(new THREE.CircleGeometry(0.6, 12), capMat);
+  capL.position.set(-1.9, 0, 0); capL.rotation.y = Math.PI/2; g.add(capL);
+  const capR = capL.clone(); capR.position.x = 1.9; capR.rotation.y = -Math.PI/2; g.add(capR);
+  return g;
+}
+// 金币光晕贴图(参考项目GlowRadial): 径向渐变+4道星芒, 128px canvas缓存
+// $字形模板: 真实字体挤出+倒角(像真硬币, 凸出与阴影显形, 非贴色)
+let coinGlyphGeo = null;
+new FontLoader().load('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/fonts/helvetiker_bold.typeface.json', f => {
+  const g = new TextGeometry('$', { font: f, size: 0.4, height: 0.05, bevelEnabled: true, bevelThickness: 0.015, bevelSize: 0.012, bevelSegments: 2, curveSegments: 6 });
+  g.computeBoundingBox();
+  const b = g.boundingBox;
+  g.translate(-(b.min.x + b.max.x) / 2, -(b.min.y + b.max.y) / 2, 0); // 居中(原点左下→中心)
+  g.computeVertexNormals();
+  coinGlyphGeo = g;
+}, undefined, () => {}); // 失败则金币无字(仍完整)
+
+let coinGlowTex = null;
+function getCoinGlowTex() {
+  if (coinGlowTex) return coinGlowTex;
+  const N = 128, R = N / 2;
+  const c = document.createElement('canvas'); c.width = c.height = N;
+  const ctx = c.getContext('2d');
+  const gr = ctx.createRadialGradient(R, R, 0, R, R, R);
+  gr.addColorStop(0, 'rgba(255,216,107,0.9)');
+  gr.addColorStop(0.35, 'rgba(255,216,107,0.35)');
+  gr.addColorStop(1, 'rgba(255,216,107,0)');
+  ctx.fillStyle = gr; ctx.fillRect(0, 0, N, N);
+  coinGlowTex = new THREE.CanvasTexture(c);
+  return coinGlowTex;
+}
+
+function createCoinObject() {
+  // A字钮钉金币(复刻参考项目river-rush的原作收集物):
+  // 立式硬币盘(盘面亮金/侧缘暗金)+双面A字浮雕+光晕盘, 绕Y自转
+  const g = new THREE.Group();
+  // 质感三件套: PBR金属反射(天空env) + 暖金自发光底 + 浮雕细节
+  // 全金统一: 字母与盘同色同材质, 靠倒角法线接住环境光=凸出与阴影显形(真硬币做法)
+  const goldFace = new THREE.MeshStandardMaterial({ color: 0xffe066, metalness: 1.0, roughness: 0.08, emissive: 0xd49000, emissiveIntensity: 0.9, envMapIntensity: 2.2 });
+  const goldRim = new THREE.MeshStandardMaterial({ color: 0xf0b83a, metalness: 1.0, roughness: 0.2, emissive: 0xb87f00, emissiveIntensity: 0.75, envMapIntensity: 1.5 });
+  // 硬币盘: Cylinder(轴向Y)转x90°立起盘面朝±Z; 材质数组[侧缘, 正面, 背面]
+  const disc = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.396, 0.396, 0.127, 32),
+    [goldRim, goldFace, goldFace]
+  );
+  disc.rotation.x = Math.PI / 2;
+  disc.castShadow = true; g.add(disc);
+  // 凸缘圆环(边缘立体感)
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.3685, 0.033, 10, 36), goldRim);
+  g.add(rim);
+  // 内圈刻线
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.264, 0.013, 6, 28), goldRim);
+  g.add(ring);
+  // $浮雕: 真实字体模板(字体加载成功后才有; 正面贴+Z, 背面绕Y翻转)
+  if (coinGlyphGeo) {
+    const gF = new THREE.Mesh(coinGlyphGeo, goldFace);
+    gF.position.z = 0.127 / 2 - 0.004;
+    const gB = new THREE.Mesh(coinGlyphGeo, goldFace);
+    gB.rotation.y = Math.PI;
+    gB.position.z = -(0.127 / 2 - 0.004);
+    g.add(gF); g.add(gB);
+  }
+  // 光晕球体: 自定义shader——朝向观察者的半球中心亮, 轮廓羽化到0
+  // 从任何角度都是一团立体光球(用户要求球体而非平面)
+  const glowMat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    uniforms: { uColor: { value: new THREE.Color(0xffd86b) }, uOpacity: { value: 0.55 } },
+    vertexShader: `
+      varying vec3 vN; varying vec3 vV;
+      void main() {
+        vN = normalize(normalMatrix * normal);
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vV = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor; uniform float uOpacity;
+      varying vec3 vN; varying vec3 vV;
+      void main() {
+        float f = pow(max(dot(normalize(vN), normalize(vV)), 0.0), 2.2);
+        gl_FragColor = vec4(uColor, uOpacity * f);
+      }`
+  });
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(0.85, 24, 18), glowMat);
+  glow.renderOrder = 6;
+  g.add(glow);
+  g.userData.glow = glow;
+  return g;
+}
+// 预加载heart.glb
+let heartGlbModel = null;
+const heartGlbLoader = new GLTFLoader();
+heartGlbLoader.load('assets/models/heart.glb', (gltf) => {
+  heartGlbModel = gltf.scene;
+  heartGlbModel.traverse(o => {
+    if (o.isMesh) { o.castShadow = true; o.material.envMapIntensity = 0; }
+  });
+});
+
+function createHeartObject() {
+  const g = new THREE.Group();
+  if (heartGlbModel) {
+    const clone = heartGlbModel.clone(true);
+    clone.scale.setScalar(1.5);
+    clone.traverse(o => { if (o.isMesh) { o.castShadow = true; } });
+    g.add(clone);
+  } else {
+    // fallback: 蓝色水晶
+    const heart = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.45, 0),
+      new THREE.MeshStandardMaterial({ color: 0x4d6bfe, metalness: 0.5, roughness: 0.2, emissive: 0x1e3a8a, emissiveIntensity: 0.5, flatShading: true })
+    );
+    heart.scale.set(0.8, 1.2, 0.8); heart.castShadow = true; g.add(heart);
+  }
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(0.75,10,8), new THREE.MeshBasicMaterial({ color: 0xff6b9d, transparent: true, opacity: 0.2 }));
+  g.add(glow);
+  return g;
+}
+function spawnObject() {
+  const r0 = Math.random();
+  let r = r0;
+  // B4 简单：障碍物概率压缩(0.58→0.42)，重掷到奖励区间
+  if (difficulty === 'easy' && r < 0.58) {
+    r = 0.58 + Math.random() * 0.42;
+  }
+  // B4 困难：奖励区间部分重掷为障碍物
+  if (difficulty === 'hard' && r > 0.58 && r < 0.72) {
+    r = Math.random() * 0.58;
+  }
+  let obj, type, w;
+  // 树桩和石头是障碍物(需躲避)，金币和爱心是奖励道具(可收集)
+  if (r < 0.38) { obj = createRockObstacle(); type = 'rock'; w = 0.9; }
+  else if (r < 0.58) { obj = createLogObstacle(); type = 'log'; w = 1.0; }
+  else if (r < 0.90) { obj = createCoinObject(); type = 'coin'; w = 0.7; }
+  else { obj = createHeartObject(); type = 'heart'; w = 0.6; }
+  // 沿弯曲河流路径生成
+  const spawnZ = -120;
+  // 瀑布下游30米净空: 生成点在任一瀑布下游30米内则跳过本次生成
+  // (障碍物与瀑布同速滚动, 相对位置不变 → 生成时检查即永久有效)
+  for (const wfz of waterfallZList) {
+    if (spawnZ < wfz && spawnZ > wfz - 30) return;
+  }
+  const cx = riverCenterX(spawnZ);
+  const hw = riverHalfWidth(spawnZ);
+  const wfSpawnY = waterfallY(spawnZ);
+  obj.position.x = cx + (Math.random()*2-1) * (hw - 1);
+  obj.position.z = spawnZ;
+  obj.position.y = (type === 'coin' || type === 'heart') ? 1.3 + Math.random()*0.5 + wfSpawnY : 0.55 + wfSpawnY;
+  obj.userData = { type, w, hit: false, spin: Math.random()*Math.PI*2, baseZ: spawnZ };
+  scene.add(obj);
+  gameObjects.push(obj);
+}
+
+// A1 道具系统——磁铁/护盾/加速/双倍
+const power = { magnet: 0, shield: false, boost: 0, double: 0 };
+let powerupTimer = 18;
+const powerGlowGeo = new THREE.SphereGeometry(0.8, 12, 12);
+const powerGlowMat = new THREE.MeshBasicMaterial({ color: 0xfff4cc, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false });
+function createPowerObject(ptype) {
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(powerGlowGeo, powerGlowMat));
+  if (ptype === 'magnet') {
+    const m = new THREE.MeshStandardMaterial({ color: 0xdd3355, emissive: 0x881122, emissiveIntensity: 0.6, roughness: 0.4 });
+    const u = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.1, 8, 16, Math.PI), m);
+    u.rotation.z = Math.PI;
+    g.add(u);
+    const tipMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.7, roughness: 0.3 });
+    for (const s of [-1, 1]) {
+      const tip = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.14, 0.12), tipMat);
+      tip.position.set(s * 0.32, 0.08, 0);
+      g.add(tip);
+    }
+  } else if (ptype === 'shield') {
+    const s = new THREE.Mesh(new THREE.IcosahedronGeometry(0.42, 0),
+      new THREE.MeshBasicMaterial({ color: 0x44ddff, wireframe: true, transparent: true, opacity: 0.9 }));
+    g.add(s);
+  } else if (ptype === 'boost') {
+    const bMat = new THREE.MeshStandardMaterial({ color: 0xffee44, emissive: 0xffaa00, emissiveIntensity: 0.9, roughness: 0.3 });
+    const c1 = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.4, 4), bMat);
+    c1.rotation.x = Math.PI; c1.position.y = 0.18;
+    const c2 = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.4, 4), bMat);
+    c2.position.y = -0.18;
+    g.add(c1); g.add(c2);
+  } else {
+    const dMat = new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0xaa8800, emissiveIntensity: 0.7, roughness: 0.25 });
+    for (const s of [-1, 1]) {
+      const oct = new THREE.Mesh(new THREE.OctahedronGeometry(0.26), dMat);
+      oct.position.x = s * 0.24; oct.scale.z = 0.6;
+      g.add(oct);
+    }
+  }
+  return g;
+}
+function spawnPowerup() {
+  const ptype = ['magnet', 'shield', 'boost', 'double'][Math.floor(Math.random() * 4)];
+  const obj = createPowerObject(ptype);
+  const spawnZ = -120;
+  const cx = riverCenterX(spawnZ);
+  const hw = riverHalfWidth(spawnZ);
+  obj.position.set(cx + (Math.random() * 2 - 1) * (hw - 1.5), 1.3 + waterfallY(spawnZ), spawnZ);
+  obj.userData = { type: 'power', ptype, w: 0.8, hit: false, spin: Math.random() * Math.PI * 2, baseZ: spawnZ };
+  scene.add(obj);
+  gameObjects.push(obj);
+}
+
+//==================================================================
+// 粒子系统
+//==================================================================
+class ParticleSystem {
+  constructor(count, color, size) {
+    this.count = count;
+    this.positions = new Float32Array(count*3);
+    this.velocities = new Float32Array(count*3);
+    this.lifetimes = new Float32Array(count);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(this.positions, 3));
+    const mat = new THREE.PointsMaterial({ color, size, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true });
+    this.mesh = new THREE.Points(geo, mat);
+    this.mesh.frustumCulled = false; scene.add(this.mesh);
+  }
+  emit(x,y,z,n,spread,up) {
+    let e=0;
+    for (let i=0; i<this.count && e<n; i++) {
+      if (this.lifetimes[i] <= 0) {
+        this.positions[i*3]=x; this.positions[i*3+1]=y; this.positions[i*3+2]=z;
+        this.velocities[i*3]=(Math.random()-0.5)*spread; this.velocities[i*3+1]=Math.random()*up+up*0.3; this.velocities[i*3+2]=(Math.random()-0.5)*spread;
+        this.lifetimes[i]=0.8+Math.random()*0.5; e++;
+      }
+    }
+  }
+  emitRain(x,y,z,n) { // 雨点式: 水滴从筏子上方落下, 溅到人物和橡皮筏上
+    let e=0;
+    for (let i=0; i<this.count && e<n; i++) {
+      if (this.lifetimes[i] <= 0) {
+        this.positions[i*3]=x+(Math.random()-0.5)*5;
+        this.positions[i*3+1]=y+2.5+Math.random()*3.5;
+        this.positions[i*3+2]=z+(Math.random()-0.5)*4;
+        this.velocities[i*3]=(Math.random()-0.5)*2.5;
+        this.velocities[i*3+1]=-1-Math.random()*2; // 向下落
+        this.velocities[i*3+2]=(Math.random()-0.5)*2.5+4; // 带前飘
+        this.lifetimes[i]=0.9+Math.random()*0.6; e++;
+      }
+    }
+  }
+  update(dt) {
+    for (let i=0; i<this.count; i++) {
+      if (this.lifetimes[i]>0) {
+        this.lifetimes[i]-=dt;
+        this.positions[i*3]+=this.velocities[i*3]*dt; this.positions[i*3+1]+=this.velocities[i*3+1]*dt; this.positions[i*3+2]+=this.velocities[i*3+2]*dt;
+        this.velocities[i*3+1]-=20*dt;
+      } else this.positions[i*3+1]=-300;
+    }
+    this.mesh.geometry.attributes.position.needsUpdate = true;
+  }
+}
+const splashParticles = new ParticleSystem(900, 0xeef6ff, 0.14); // 细水滴: 颗粒小数量多
+const goldParticles = new ParticleSystem(150, 0xffd23f, 0.35);
+
+//==================================================================
+// 后处理
+//==================================================================
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+// bloom已移除: strength=0视觉零贡献却每帧跑~10个全屏blur pass
+composer.addPass(new OutputPass());
+// composer 就绪后再注册 resize（避免 TDZ 引用错误）
+window.addEventListener('resize', () => {
+  composer.setSize(window.innerWidth, window.innerHeight);
+});
+
+//==================================================================
+// 相机（沿弯曲河流路径前瞻）
+//==================================================================
+const camState = { pos: new THREE.Vector3(0, CFG.cameraHeight, CFG.cameraBack), shakeT: 0, bobPhase: 0, overhead: 0, prevWfY: 0, overheadHold: 0, prevFalling: false, impactHold: 0, impact: 0 };
+function updateCamera(dt, time) {
+  const raftZ = 0;
+  const raftCx = riverCenterX(raftZ);
+  const backZ = raftZ + CFG.cameraBack;
+  const camCx = riverCenterX(backZ);
+  const camDir = riverDirection(backZ);
+  // 相机高度跟随瀑布落差——防止人物丢失
+  const wfY = waterfallY(raftZ);
+
+  // 船体下落时切换俯视视角——检测waterfallY的下降速率
+  const wfDelta = wfY - camState.prevWfY;
+  camState.prevWfY = wfY;
+  // wfDelta < 0 说明水面在下降（船在下落）→ 俯视，并保持hold计时
+  if (wfDelta < -0.02) {
+    camState.overheadHold = 0.5; // 下落结束后再保持0.5秒
+  } else {
+    camState.overheadHold -= dt; // 倒计时
+  }
+  // 只有hold>0时才保持俯瞰，hold结束后恢复（恢复速度更慢）
+  const wantOverhead = camState.overheadHold > 0 ? 1 : 0;
+  const lerpSpeed = wantOverhead > camState.overhead ? 4 : 1.2;
+  camState.overhead += (wantOverhead - camState.overhead) * dt * lerpSpeed;
+  const ov = camState.overhead;
+
+  // 落水瞬间: 从下落→停止 = 冲击水面 → 大水花+震屏+2秒障碍物冻结
+  // 同时取消俯瞰保持, 切入落水近景(快速压近=冲击感)
+  const falling = wfDelta < -0.02;
+  if (camState.prevFalling && !falling && wfY < -2) {
+    splashParticles.emit(raft.position.x, 0.3, raft.position.z, 150, 12, 15); // 大爆溅(细颗粒×多数量)
+    splashParticles.emitRain(raft.position.x, raft.position.y, raft.position.z, 90); // 雨点落到筏上
+    camState.shakeT = 0.55;
+    camState.impactHold = 0.75;   // 落水近景保持0.75秒
+    camState.overheadHold = 0;    // 取消俯瞰保持
+  }
+  camState.prevFalling = falling;
+  if (camState.impactHold > 0) camState.impactHold -= dt;
+  const wantImpact = camState.impactHold > 0 ? 1 : 0;
+  const iLerp = wantImpact > camState.impact ? 9 : 1.6; // 压近快(9), 恢复慢(1.6)
+  camState.impact += (wantImpact - camState.impact) * dt * iLerp;
+  const iv = camState.impact;
+
+  // 正常相机位置（第三人称追逐）
+  const tx = camCx + Math.sin(camDir) * 2;
+  const ty = CFG.cameraHeight + wfY + raftState.y * 0.25;
+  const tz = CFG.cameraBack;
+  // 下落中: 原高空俯瞰逻辑(不变)
+  const ovTx = raftCx;
+  const ovTy = CFG.cameraHeight + 12 + wfY;
+  const ovTz = CFG.cameraBack - 3;
+  // 落水近景: 贴着落水池水面的低机位
+  const imTx = raftCx;
+  const imTy = wfY + 2.2;
+  const imTz = CFG.cameraBack * 0.55;
+  // 两级插值: 正常↔俯瞰(下落) → 再被落水近景覆盖
+  const mixX = tx * (1 - ov) + ovTx * ov;
+  const mixY = ty * (1 - ov) + ovTy * ov;
+  const mixZ = tz * (1 - ov) + ovTz * ov;
+  const fx = mixX * (1 - iv) + imTx * iv;
+  const fy = mixY * (1 - iv) + imTy * iv;
+  const fz = mixZ * (1 - iv) + imTz * iv;
+
+  camState.pos.x += (fx - camState.pos.x) * dt * 4;
+  camState.pos.y += (fy - camState.pos.y) * dt * 5;
+  camState.pos.z += (fz - camState.pos.z) * dt * 4;
+  camState.bobPhase += dt * 2.5;
+  const bob = Math.sin(camState.bobPhase)*0.12 + Math.sin(camState.bobPhase*1.6)*0.06;
+  let shakeX=0, shakeY=0;
+  if (camState.shakeT > 0) { camState.shakeT-=dt; const s=camState.shakeT*8; shakeX=(Math.random()-0.5)*s; shakeY=(Math.random()-0.5)*s; }
+  camera.position.set(camState.pos.x+shakeX, camState.pos.y+bob+shakeY, camState.pos.z);
+  // 看向前方——Y也跟随瀑布落差，俯视时看向筏子
+  const lookZ = -CFG.cameraLookAhead;
+  const lookCx = riverCenterX(lookZ);
+  const lookWfY = waterfallY(lookZ);
+  // 正常lookAt
+  const nLookX = lookCx, nLookY = 1.8 + lookWfY + raftState.y*0.15 + bob*0.4, nLookZ = lookZ;
+  // 俯视lookAt——看向筏子正下方
+  const oLookX = raftCx, oLookY = wfY, oLookZ = 0;
+  camera.lookAt(
+    nLookX * (1 - ov) + oLookX * ov,
+    nLookY * (1 - ov) + oLookY * ov,
+    nLookZ * (1 - ov) + oLookZ * ov,
+  );
+}
+
+//==================================================================
+// MediaPipe Pose
+//==================================================================
+const LMS = {
+  lHip:23, rHip:24,
+  lShoulder:11, rShoulder:12,
+  lElbow:13, rElbow:14,
+  lWrist:15, rWrist:16
+};
+async function initPose() {
+  try {
+    const mpPose = new window.Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${f}` });
+    mpPose.setOptions({ modelComplexity:0, smoothLandmarks:true, enableSegmentation:false, minDetectionConfidence:0.5, minTrackingConfidence:0.5 });
+    mpPose.onResults(onPoseResults);
+    const videoEl = document.createElement('video'); videoEl.setAttribute('playsinline',''); videoEl.muted = true;
+    const mpCamera = new window.Camera(videoEl, { onFrame: async () => { await mpPose.send({ image: videoEl }); }, width:640, height:480 });
+    await mpCamera.start();
+    loadingPct.textContent = '体感摄像头已就绪';
+  } catch(e) { console.warn('MediaPipe init failed', e); loadingPct.textContent = '摄像头未启用（可用键盘控制）'; }
+  finally { loadingMgr.items.pose = true; loadingMgr.check(); }
+}
+function onPoseResults(results) {
+  pctx.save(); pctx.scale(-1,1); pctx.translate(-poseCanvas.width,0);
+  pctx.drawImage(results.image,0,0,poseCanvas.width,poseCanvas.height); pctx.restore();
+  const lm = results.poseLandmarks;
+  if (!lm) { poseData.detected=false; poseStatus.textContent='🔴'; return; }
+  poseData.detected=true; poseStatus.textContent='🟢';
+  const lhip=lm[LMS.lHip], rhip=lm[LMS.rHip];
+  let hipMidX=(lhip.x+rhip.x)/2, hipMidY=(lhip.y+rhip.y)/2; hipMidX=1-hipMidX;
+  poseData.smoothHipX=poseData.smoothHipX*0.7+hipMidX*0.3;
+  let lean=(poseData.smoothHipX-0.5)*2.2; lean=Math.max(-1,Math.min(1,lean));
+  // 追踪 lean 变化速率——玩家横移快，筏子横移也快
+  poseData.leanVel = (lean - poseData.prevLean) * 30; // 每帧变化量 × 30fps
+  poseData.prevLean = poseData.lean;
+  poseData.lean=poseData.lean*0.6+lean*0.4;
+  poseData.baselineY=poseData.baselineY*0.92+hipMidY*0.08;
+  const now = performance.now() / 1000;
+  if (poseData.jumpEndTime > 0 && now > poseData.jumpEndTime) poseData.inJump = false;
+  const rise=poseData.baselineY-hipMidY;
+  if (rise>0.03 && !poseData.inJump && now > (poseData.jumpEndTime + 0.3)) {
+    poseData.inJump = true;
+    poseData.jumpImpulse = true;
+    poseData.jumpEndTime = now + 0.8; // 跳跃动画持续0.8秒
+    // console.log('JUMP detected! rise=', rise.toFixed(3), 'at', now.toFixed(2));
+  }
+
+  // ===== 手臂追踪（完全跟随）=====
+  const ls=lm[LMS.lShoulder], rs=lm[LMS.rShoulder];
+  const lw=lm[LMS.lWrist], rw=lm[LMS.rWrist];
+  const le=lm[LMS.lElbow], re=lm[LMS.rElbow];
+  if (ls && rs && lw && rw) {
+    // 镜像后坐标
+    // 左臂：肩→腕角度 (0=向下, PI/2=水平, PI=向上)
+    const lDx = (1 - lw.x) - (1 - ls.x);
+    const lDy = lw.y - ls.y;
+    let lArmAngle = Math.atan2(lDx, -lDy); // 0~PI, 向下到向上
+    lArmAngle = Math.max(0, Math.min(Math.PI, lArmAngle));
+
+    // 左肘弯曲量 (0=直臂, ~2.5=完全弯曲)
+    let lElbow = 0;
+    if (le) {
+      const sex=(1-le.x)-(1-ls.x), sey=le.y-ls.y;
+      const ewx=(1-lw.x)-(1-le.x), ewy=lw.y-le.y;
+      const dot=sex*ewx+sey*ewy;
+      const m1=Math.sqrt(sex*sex+sey*sey), m2=Math.sqrt(ewx*ewx+ewy*ewy);
+      if (m1>0.001 && m2>0.001) lElbow = Math.PI - Math.acos(Math.max(-1,Math.min(1,dot/(m1*m2))));
+    }
+
+    // 右臂
+    const rDx = (1 - rw.x) - (1 - rs.x);
+    const rDy = rw.y - rs.y;
+    let rArmAngle = Math.atan2(rDx, -rDy);
+    rArmAngle = Math.max(0, Math.min(Math.PI, rArmAngle));
+
+    let rElbow = 0;
+    if (re) {
+      const sex=(1-re.x)-(1-rs.x), sey=re.y-rs.y;
+      const ewx=(1-rw.x)-(1-re.x), ewy=rw.y-re.y;
+      const dot=sex*ewx+sey*ewy;
+      const m1=Math.sqrt(sex*sex+sey*sey), m2=Math.sqrt(ewx*ewx+ewy*ewy);
+      if (m1>0.001 && m2>0.001) rElbow = Math.PI - Math.acos(Math.max(-1,Math.min(1,dot/(m1*m2))));
+    }
+
+    // 平滑插值（轻量平滑保持响应性）
+    poseData.armLZ = poseData.armLZ * 0.35 + lArmAngle * 0.65;
+    poseData.armRZ = poseData.armRZ * 0.35 + rArmAngle * 0.65;
+    poseData.elbowL = poseData.elbowL * 0.35 + lElbow * 0.65;
+    poseData.elbowR = poseData.elbowR * 0.35 + rElbow * 0.65;
+  }
+
+  drawSkeleton(lm);
+}
+function drawSkeleton(lm) {
+  const pw=poseCanvas.width, ph=poseCanvas.height;
+  const conns=[[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[24,26],[25,27],[26,28]];
+  pctx.strokeStyle='rgba(255,210,63,.8)'; pctx.lineWidth=3; pctx.beginPath();
+  for (const [a,b] of conns) { const la=lm[a], lb=lm[b]; if(!la||!lb||(la.visibility||1)<0.3||(lb.visibility||1)<0.3) continue; pctx.moveTo((1-la.x)*pw,la.y*ph); pctx.lineTo((1-lb.x)*pw,lb.y*ph); }
+  pctx.stroke(); pctx.fillStyle='#4fc3f7';
+  for (const idx of [0,11,12,23,24]) { const p=lm[idx]; if(!p) continue; pctx.beginPath(); pctx.arc((1-p.x)*pw,p.y*ph,4,0,Math.PI*2); pctx.fill(); }
+}
+
+//==================================================================
+// 任务系统（仿 dsh-pet 玻璃面板风格）
+//==================================================================
+const QUESTS = [
+  { id:'first100', icon:'🌊', text:'初次启航 · 漂流 100 米', target:100, type:'dist', reward:200, done:false },
+  { id:'coin5', icon:'💎', text:'收集 5 颗水晶', target:5, type:'coin', reward:300, done:false },
+  { id:'dist300', icon:'🐳', text:'深海探索 · 漂流 300 米', target:300, type:'dist', reward:500, done:false },
+  { id:'coin15', icon:'💎', text:'水晶收藏家 · 15 颗', target:15, type:'coin', reward:600, done:false },
+  { id:'dist500', icon:'🐋', text:'鲸鱼之旅 · 漂流 500 米', target:500, type:'dist', reward:1000, done:false },
+  { id:'survivor', icon:'🛡️', text:'无伤漂流 200 米', target:200, type:'noflag-dist', reward:800, done:false },
+];
+let questPanel, questList, questToast, toastIcon, toastTitle, toastReward;
+let noHitDistance = 0; // 无伤距离追踪
+// A3 连击系统
+const combo = { count: 0, timer: 0, mult: 1 };
+const comboFx = document.getElementById('comboFx');
+// B1 瀑布QTE + 慢动作
+const qte = { state: 'idle', done: false };
+const qteFx = document.getElementById('qteFx');
+const sharkWarn = document.getElementById('sharkWarn');
+let timeScale = 1, slowmoT = 0;
+// A1 道具HUD引用
+const powerBar = document.getElementById('powerBar');
+const pwMagnet = document.getElementById('pw-magnet');
+const pwShield = document.getElementById('pw-shield');
+const pwBoost = document.getElementById('pw-boost');
+const pwDouble = document.getElementById('pw-double');
+const pwfMagnet = document.getElementById('pwf-magnet');
+const pwfBoost = document.getElementById('pwf-boost');
+const pwfDouble = document.getElementById('pwf-double');
+
+function initQuestSystem() {
+  questPanel = document.getElementById('questPanel');
+  questList = document.getElementById('questList');
+  questToast = document.getElementById('questToast');
+  toastIcon = document.getElementById('toastIcon');
+  toastTitle = document.getElementById('toastTitle');
+  toastReward = document.getElementById('toastReward');
+}
+
+function resetQuests() {
+  QUESTS.forEach(q => q.done = false);
+  noHitDistance = 0;
+  combo.count = 0; combo.timer = 0; combo.mult = 1; comboFx.style.opacity = '0';
+  qte.state = 'idle'; qte.done = false; qteFx.style.opacity = '0';
+  timeScale = 1; slowmoT = 0;
+  renderQuestPanel();
+}
+
+function renderQuestPanel() {
+  let html = '';
+  for (const q of QUESTS) {
+    let progress = 0, progressText = '';
+    if (q.type === 'dist') { progress = Math.min(distance, q.target); progressText = `${Math.floor(progress)}/${q.target}m`; }
+    else if (q.type === 'coin') { progress = Math.min(coins, q.target); progressText = `${progress}/${q.target}`; }
+    else if (q.type === 'noflag-dist') { progress = Math.min(noHitDistance, q.target); progressText = `${Math.floor(progress)}/${q.target}m`; }
+    const pct = Math.min(100, (progress / q.target) * 100);
+    const doneClass = q.done ? ' done' : '';
+    html += `<div class="quest-item${doneClass}">
+      <span class="quest-icon">${q.icon}</span>
+      <div class="quest-text">${q.text}<div class="quest-bar"><div class="quest-bar-fill" style="width:${pct}%"></div></div></div>
+      <span class="quest-progress">${progressText}</span>
+    </div>`;
+  }
+  questList.innerHTML = html;
+}
+
+function checkQuests(hitTaken) {
+  if (hitTaken) noHitDistance = 0;
+  let changed = false;
+  for (const q of QUESTS) {
+    if (q.done) continue;
+    let complete = false;
+    if (q.type === 'dist' && distance >= q.target) complete = true;
+    else if (q.type === 'coin' && coins >= q.target) complete = true;
+    else if (q.type === 'noflag-dist' && noHitDistance >= q.target) complete = true;
+    if (complete) {
+      q.done = true;
+      score += q.reward;
+      showQuestToast(q);
+      changed = true;
+    }
+  }
+  if (changed || Math.floor(time * 3) % 3 === 0) renderQuestPanel();
+}
+
+let toastTimer = null;
+function showQuestToast(q) {
+  toastIcon.textContent = q.icon;
+  toastTitle.textContent = '深海任务完成！';
+  toastReward.textContent = `+${q.reward} 分`;
+  questToast.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => questToast.classList.remove('show'), 2500);
+}
+
+//==================================================================
+// 游戏逻辑
+//==================================================================
+let score=0, lives=3, distance=0, coins=0, speed=CFG.baseSpeed, spawnTimer=0.8, invuln=0, time=0;
+let currentRiverWidth = CFG.baseRiverHalfWidth;
+
+// B4 难度等级——简单(障碍更少)/标准(当前)/困难(呼吸式节奏+提速)
+let difficulty = localStorage.getItem('rr_difficulty') || 'normal';
+const diffBtns = { easy: diffEasy, normal: diffNormal, hard: diffHard };
+function setDifficulty(d) {
+  difficulty = d;
+  localStorage.setItem('rr_difficulty', d);
+  for (const [k, btn] of Object.entries(diffBtns)) btn.classList.toggle('sel', k === d);
+}
+diffEasy.addEventListener('click', () => setDifficulty('easy'));
+diffNormal.addEventListener('click', () => setDifficulty('normal'));
+diffHard.addEventListener('click', () => setDifficulty('hard'));
+setDifficulty(difficulty);
+
+function startGame() {
+  score=0; lives=3; distance=0; coins=0; speed=CFG.baseSpeed; spawnTimer=0.8; invuln=0; time=0; riverPhase=0;
+  raftState.x=0; raftState.targetX=0; raftState.y=0; raftState.vy=0; raftState.onWater=true; raftState.tilt=0; raftState.waterfallFx=0;
+  poseData.jumpImpulse=false;
+  for (const o of gameObjects) scene.remove(o);
+  gameObjects=[];
+  for (const f of fishObjects) scene.remove(f);
+  fishObjects.length = 0;
+  fishTimer = 8;
+  // B3 场景阶段重置（idx=-1触发下一帧重设为峡谷）
+  stageState.idx = -1;
+  // A1 道具重置
+  power.magnet = 0; power.shield = false; power.boost = 0; power.double = 0;
+  powerupTimer = 18; shieldBubble.visible = false;
+  gameState=ST.PLAYING;
+  startScreen.classList.add('hidden'); overScreen.classList.add('hidden');
+  hud.classList.remove('hidden'); leanBar.classList.remove('hidden'); leanHint.classList.remove('hidden');
+  powerBar.classList.remove('hidden');
+  questPanel.classList.remove('hidden');
+  resetQuests();
+  setTimeout(()=>leanHint.classList.add('hidden'), 5000);
+  // 播放音乐和流水声
+  bgmAudio.currentTime = 0; riverAudio.currentTime = 0;
+  bgmAudio.play().catch(()=>{}); riverAudio.play().catch(()=>{});
+}
+function gameOver() {
+  gameState=ST.OVER;
+  bgmAudio.pause(); riverAudio.pause();
+  finalScore.textContent=score; finalDist.textContent='漂流距离：'+Math.floor(distance)+'m'; finalCoins.textContent='收集水晶：'+coins;
+  overScreen.classList.remove('hidden'); hud.classList.add('hidden'); leanBar.classList.add('hidden'); leanHint.classList.add('hidden');
+  powerBar.classList.add('hidden');
+  // A1 道具清理
+  power.magnet = 0; power.shield = false; power.boost = 0; power.double = 0;
+  shieldBubble.visible = false;
+  questPanel.classList.add('hidden');
+  speedFx.style.opacity='0'; rapidFx.style.opacity='0';
+}
+
+//==================================================================
+// 鱼/鲨鱼系统
+//==================================================================
+const fishObjects = [];
+let fishTimer = 8; // 8秒后第一条鱼出现
+const fishModels = { fish: null, shark: null };
+// 鲨鱼头顶警告标记(⚠️ Sprite)——远处定位鲨鱼
+const warnSpriteMat = (() => {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 128;
+  const cx = c.getContext('2d');
+  cx.font = '100px sans-serif';
+  cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  cx.shadowColor = 'rgba(255,40,40,.9)'; cx.shadowBlur = 18;
+  cx.fillText('⚠️', 64, 70);
+  const t = new THREE.CanvasTexture(c);
+  return new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false });
+})();
+
+// 预加载鱼和鲨鱼模型
+async function loadFishModels() {
+  // FBX加载helper(带失败兜底)
+  const loadFBX = (path) => new Promise((res) => {
+    fbxLoader.load(path, (o) => res(o), undefined, () => { console.warn('FBX加载失败:', path); res(null); });
+  });
+  const [mackerel, tuna, shark, mantaRaw, fish3Raw] = await Promise.all([
+    loadGLB('assets/models/pirate/Prop_Fish_Mackerel.gltf'),
+    loadGLB('assets/models/pirate/Prop_Fish_Tuna.gltf'),
+    loadGLB('assets/models/pirate/Characters_Shark.gltf'),
+    loadFBX('assets/models/fish/MantaRay.fbx'),
+    loadFBX('assets/models/fish/Fish3.fbx'),
+  ]);
+  fishModels.fish1 = mackerel;
+  fishModels.fish2 = tuna;
+  fishModels.shark = shark;
+
+  // 蒙皮烘焙(鲨鱼同款): FBX/GLB蒙皮模型的骨骼绑定与静止位姿/动画轨道
+  // 单位不一致 → 蒙皮顶点爆炸到1e300(node实测) → 渲染不可见
+  // 原始顶点=正确的绑定姿势形状, 烘焙成普通Mesh永久解决; 游动感用程序动画
+  function bakeSkinned(root) {
+    const skinned = [];
+    root.traverse(o => { if (o.isSkinnedMesh) skinned.push(o); });
+    for (const o of skinned) {
+      const m = new THREE.Mesh(o.geometry, o.material);
+      m.name = o.name;
+      m.castShadow = true; m.receiveShadow = true;
+      m.position.copy(o.position); m.quaternion.copy(o.quaternion); m.scale.copy(o.scale);
+      o.parent.add(m);
+      o.parent.remove(o);
+    }
+  }
+  // FBX鱼归一化: 运行时测包围盒→长轴转Z→按目标长度定标(现实比例参照人高≈1.55单位)
+  function normalizeFish(raw, targetLen, widthMul) {
+    if (!raw) return null;
+    const box = new THREE.Box3().setFromObject(raw);
+    const s = box.getSize(new THREE.Vector3());
+    const long = s.x >= s.y && s.x >= s.z ? 0 : (s.y >= s.z ? 1 : 2);
+    const g = new THREE.Group();
+    g.add(raw);
+    if (long === 1) raw.rotation.x = -Math.PI / 2;       // 文件内鱼是竖的(脊柱Y) → 放平到Z
+    else if (long === 0) raw.rotation.y = Math.PI / 2;   // X长轴 → Z(同现有鱼)
+    if (widthMul) raw.scale.x *= widthMul;               // 加宽(防太窄看不见)
+    const box2 = new THREE.Box3().setFromObject(g);
+    const s2 = box2.getSize(new THREE.Vector3());
+    const k = targetLen / Math.max(s2.z, 0.001);
+    g.scale.setScalar(k);
+    console.log('鱼归一化:', raw.name || '?', '原尺寸', s.x.toFixed(2), s.y.toFixed(2), s2.z.toFixed(2), '长轴', 'XYZ'[long], '→ 缩放', k.toFixed(3), '目标长', targetLen);
+    return g;
+  }
+  if (mantaRaw) bakeSkinned(mantaRaw);
+  if (fish3Raw) bakeSkinned(fish3Raw);
+  // 蝠鲼: 用户要求两倍人的大小(人高≈1.55) → 全长3.1单位
+  fishModels.manta = normalizeFish(mantaRaw, 3.1);
+  // Fish3: 小鱼(≈1.1单位, 略小于现有鱼), 宽度×2防太窄
+  fishModels.fish3 = normalizeFish(fish3Raw, 1.1, 2);
+  // 新鱼材质质感(模板上做一次, clone共享): 保留原贴图只加光泽
+  for (const key of ['manta', 'fish3']) {
+    if (fishModels[key]) fishModels[key].traverse(o => {
+      if (o.isMesh && o.material && !Array.isArray(o.material)) {
+        o.material.roughness = 0.3;
+        o.material.envMapIntensity = 1.0;
+        if (key === 'manta') {
+          // 蝠鲼专属: 提亮+强反光(水 поверхности下清晰可见)
+          o.material.color.offsetHSL(0, 0.05, 0.18);
+          o.material.roughness = 0.2;        // 锐利湿滑高光
+          o.material.metalness = 0.35;       // 金属反射
+          o.material.envMapIntensity = 1.5;  // 天空环境强反射
+          o.material.emissive = new THREE.Color(0x2e4a58);
+          o.material.emissiveIntensity = 0.45;
+        }
+      }
+    });
+  }
+  if (shark) {
+    // 关键修复: 鲨鱼是SkinnedMesh(蒙皮), 各种clone方式渲染都会坍缩/不可见
+    // 我们不给鲨鱼播骨骼动画 → 直接烘焙成普通静态Mesh(原始顶点=绑定位姿形状)
+    const skinned = [];
+    shark.traverse(o => { if (o.isSkinnedMesh) skinned.push(o); });
+    for (const o of skinned) {
+      const m = new THREE.Mesh(o.geometry, o.material);
+      m.name = o.name;
+      m.castShadow = true; m.receiveShadow = true;
+      m.position.copy(o.position); m.quaternion.copy(o.quaternion); m.scale.copy(o.scale);
+      o.parent.add(m);
+      o.parent.remove(o);
+    }
+    // 质感: 湿滑光泽——低粗糙度出锐利高光, 金属度+envMapIntensity出反光
+    // (scene.environment=Sky的PMREM已全局生效, 只需调参数)
+    shark.traverse(o => {
+      if (o.isMesh && o.material) {
+        o.material.roughness = 0.22;   // 锐利镜面高光
+        o.material.metalness = 0.3;    // 金属反射
+        o.material.envMapIntensity = 1.1;
+        o.material.color.offsetHSL(0, 0, 0.22);
+        o.material.emissive = new THREE.Color(0x3a4a5c);
+        o.material.emissiveIntensity = 0.5;
+      }
+    });
+  }
+  console.log('Fish models loaded:', !!mackerel, !!tuna, !!shark);
+}
+loadFishModels();
+
+function spawnFish() {
+  // 确保模型已加载
+  // 物种抽取: 鲨鱼25% / 蝠鲼20% / Fish3鱼群25% / 原鱼30%
+  const roll = Math.random();
+  const kind = roll < 0.25 ? 'shark' : roll < 0.45 ? 'manta' : roll < 0.72 ? 'fish3'
+    : (Math.random() < 0.5 ? 'fish1' : 'fish2');
+  const isShark = kind === 'shark';
+  let model;
+  let modelScale;
+  if (kind === 'shark' && fishModels.shark) {
+    // 鲨鱼是蒙皮模型(SharkArmature+骨骼)，必须用SkeletonUtils.clone
+    model = SkeletonUtils.clone(fishModels.shark);
+    modelScale = 0.3;
+  } else if (kind === 'manta' && fishModels.manta) {
+    model = SkeletonUtils.clone(fishModels.manta); // FBX蒙皮鱼必须SkeletonUtils.clone
+  } else if (kind === 'fish3' && fishModels.fish3) {
+    model = SkeletonUtils.clone(fishModels.fish3);
+  } else {
+    const fishModel = kind === 'fish2' ? fishModels.fish2 : fishModels.fish1;
+    if (!fishModel) { fishTimer = 3; return; } // 模型未加载，3秒后重试
+    model = fishModel.clone(true);
+    modelScale = 0.4 + Math.random() * 0.2;
+  }
+  if (!model) { fishTimer = 3; return; }
+
+  // 修复材质——原鱼重新着色(鲜艳); manta/fish3保留FBX原贴图(载入时已加光泽)
+  if (!isShark && (kind === 'fish1' || kind === 'fish2')) {
+    const fishColors = [0xff4444, 0xff8800, 0xffdd00, 0x44ff44, 0x44ddff, 0xff44ff, 0xff66aa];
+    const fishColor = fishColors[Math.floor(Math.random() * fishColors.length)];
+    model.traverse(o => {
+      if (o.isMesh) {
+        o.material = new THREE.MeshStandardMaterial({
+          color: fishColor,
+          roughness: 0.22,          // 湿滑鱼身: 锐利高光
+          metalness: 0.35,          // 反光
+          envMapIntensity: 1.2,     // Sky环境反射
+          emissive: fishColor,
+          emissiveIntensity: 0.3,
+        });
+      }
+    });
+  } else if (isShark) {
+    // 材质已在loadFishModels里提亮过(clone共享材质)，这里不再改
+  }
+  if (isShark) {
+    // 鲨鱼长轴=Z(5.63原始)，×3.3≈7单位(×1.5放大后)
+    model.scale.set(modelScale * 3.96, modelScale * 5.4, modelScale * 4.95); // 再×1.2: 长约8.4单位
+  } else if (kind === 'manta' || kind === 'fish3') {
+    // FBX新鱼: 现实比例已在load时归一(蝠鲼6.5/Fish3 1.1宽×2), 不再缩放
+  } else {
+    model.scale.set(modelScale * 1.3, modelScale * 1.7, modelScale * 3.6); // 鱼群调小(1.8,2.4,5.0→1.3,1.7,3.6)
+  }
+
+  // 鱼群数量: 鲨鱼1 / 蝠鲼2~3条一群 / Fish3 10几条一群 / 原鱼3~6
+  const count = isShark ? 1
+    : kind === 'manta' ? 2 + Math.floor(Math.random() * 2)
+    : kind === 'fish3' ? 10 + Math.floor(Math.random() * 5)
+    : (3 + Math.floor(Math.random() * 4));
+  // 鱼类只在宽阔水域出现——在生成区间采样, 选河宽最大处
+  function pickWideSpawnZ(zMin, zMax) {
+    let best = zMin, bestW = -1;
+    for (let z = zMin; z <= zMax; z += 5) {
+      const w = riverHalfWidth(z);
+      if (w > bestW) { bestW = w; best = z; }
+    }
+    return { z: best, w: bestW };
+  }
+  // 鲨鱼带[-130,-80](雾远端浮现); 鱼带[-110,-40]
+  const band = isShark
+    ? pickWideSpawnZ(-130, -80)
+    : pickWideSpawnZ(-110, -40);
+  if (band.w < 8) {
+    // 前方整段都偏窄(半宽<8) → 等2秒, 等宽河段滚进视野再生成
+    fishTimer = 2;
+    return;
+  }
+  const spawnZ = band.z;
+  const cx = riverCenterX(spawnZ);
+  const hw = riverHalfWidth(spawnZ);
+  const wfY = waterfallY(spawnZ);
+  // 横向游动方向（左→右 或 右→左）
+  const direction = Math.random() < 0.5 ? 1 : -1;
+
+  for (let i = 0; i < count; i++) {
+    // 蝠鲼/Fish3是FBX蒙皮模型(带游动动画), 必须SkeletonUtils.clone(鲨鱼教训)
+    const fish = (isShark || kind === 'manta' || kind === 'fish3') ? SkeletonUtils.clone(model) : model.clone(true);
+    // 以河道中心为参照的偏移量——跟随河道弯曲，永不游出河
+    const xOff = direction > 0
+      ? -hw * 0.6 + (i / count) * hw * 1.2
+      : hw * 0.6 - (i / count) * hw * 1.2;
+    fish.position.set(
+      cx + xOff,
+      -1.5 + wfY + (Math.random() - 0.5) * 0.3,
+      spawnZ + (Math.random() - 0.5) * 15
+    );
+    // 朝向：鱼用PI/2(长轴=X)；鲨鱼用0(实测长轴=Z, 流线正对船=相向而行)
+    // 注意: 上次鲨鱼改PI/2后"又看不见"——横置+侧面对镜头高速掠过难察觉, 0才可见
+    fish.rotation.y = (isShark || kind === 'manta' || kind === 'fish3')
+      ? 0  // 新FBX鱼归一后长轴=Z(同鲨鱼流线朝向)
+      : Math.PI / 2 + direction * 0.25; // 原鱼长轴=X, 实测颌骨bind位Z=+1.58→rotation=0正对玩家
+    fish.userData = {
+      isFish: true,
+      isShark, // 鲨鱼威胁标记
+      kind,
+      direction,
+      xOff,
+      // 鲨鱼主动冲刺(8~12)；蝠鲼最慢(1.2~2.2)；其他鱼再放慢(2~4)
+      upstreamSpeed: isShark ? 8 + Math.random() * 4
+        : kind === 'manta' ? 1.2 + Math.random() * 1
+        : 2 + Math.random() * 2,
+      bob: Math.random() * Math.PI * 2,
+      baseZ: fish.position.z,
+      lifetime: 0
+    };
+    // FBX蒙皮已烘焙成静态Mesh(骨骼绑定坏, node实测蒙皮顶点1e300爆炸)
+    // 游动感由update里的程序动画提供: 蝠鲼振翅(滚转), 鱼摆尾
+    if (kind === 'manta') {
+      fish.position.y = -1.8 + wfY + (Math.random() - 0.5) * 0.5; // 蝠鲼深滑
+    }
+    if (isShark) {
+      // 跳跃方案: 'over'=越过头顶落入后方 / 'front'=前方落水
+      fish.userData.jumpPlan = Math.random() < 0.5 ? 'over' : 'front';
+      // 鲨鱼只露背鳍: 顶点轮廓实测鳍尖raw1.29/背部0.5 → 水线raw0.85
+      // y = -0.85×scaleY(1.62) ≈ -1.4, 鳍尖露出约0.7单位, 身体全沉
+      fish.position.y = -1.4 + wfY;
+    }
+    scene.add(fish);
+    fishObjects.push(fish);
+  }
+  console.log(isShark ? '🦈 鲨鱼出现!' : '🐟 鱼群出现(' + kind + '×' + count + ')');
+}
+
+function update(dt) {
+  time += dt;
+
+  // 水面顶点跟随河流弯曲 + 瀑布落差——每帧更新顶点位置
+  const wPos = waterGeo.attributes.position;
+  for (let i = 0; i <= waterSegments; i++) {
+    const z = (i / waterSegments) * 600 - 300;
+    const cx = riverCenterX(z);
+    const hw = riverHalfWidth(z);
+    const wfY = waterfallY(z); // 瀑布处水面下降
+    for (let j = 0; j <= 2; j++) {
+      const idx = i * 3 + j;
+      const t = j / 2;
+      const x = cx + (t - 0.5) * 2 * hw;
+      wPos.setX(idx, x);
+      // y跟随瀑布落差，加上波纹
+      const waveRipple = Math.sin(time*1.5 + z*0.1 + t*Math.PI)*0.06;
+      wPos.setY(idx, wfY + waveRipple);
+    }
+  }
+  wPos.needsUpdate = true;
+
+  // 河床跟随河流弯曲 + 瀑布落差
+  const bPos = riverbed.geometry.attributes.position;
+  for (let i = 0; i <= waterSegments; i++) {
+    const z = (i / waterSegments) * 600 - 300;
+    const cx = riverCenterX(z);
+    const hw = riverHalfWidth(z);
+    const wfY = waterfallY(z);
+    for (let j = 0; j <= 4; j++) {
+      const idx = i * 5 + j;
+      const t = j / 4;
+      const x = cx + (t - 0.5) * 2 * (hw + 5);
+      bPos.setX(idx, x);
+      bPos.setY(idx, -1.8 + wfY);
+    }
+  }
+  bPos.needsUpdate = true;
+  if ((frameCount & 1) === 0) riverbed.geometry.computeVertexNormals(); // 法线隔帧(视觉无差)
+
+  // 地形顶点跟随瀑布落差 + 河流弯曲——同时更新X和Y
+  // 左岸：j=0 是河道边缘（跟随河流弯曲），j>0 向外延伸
+  const tPos = canyonTerrain.geometry.attributes.position;
+  const segs = 400, wSegs = 20, wid = 80, overlap = 4; // 与createCanyonTerrain的segs保持一致(150→400)
+  // 左岸
+  for (let i = 0; i <= segs; i++) {
+    const z = (i / segs) * 600 - 300;
+    const wfOff = waterfallHeightOffset(z);
+    const cxL = riverCenterX(z), hwL = riverHalfWidth(z); // 外提: 原内层每j重复调用
+    const edgeX = cxL - hwL + overlap;
+    const waveA = Math.sin(z * 0.015); // 外提
+    for (let j = 0; j <= wSegs; j++) {
+      const idx = i * (wSegs + 1) + j;
+      // X跟随河流弯曲
+      const newX = edgeX - (j / wSegs) * (wid + overlap);
+      tPos.setX(idx, newX);
+      if (j === 0) {
+        tPos.setY(idx, -1.5 - wfOff);
+      } else {
+        const d = Math.max(0, Math.abs(newX - cxL) - hwL);
+        let h = Math.min(d * d * 0.04, 14) + waveA * Math.min(d * 0.3, 1.0);
+        tPos.setY(idx, h - wfOff);
+      }
+    }
+  }
+  // 右岸
+  const baseIdx = (segs + 1) * (wSegs + 1);
+  for (let i = 0; i <= segs; i++) {
+    const z = (i / segs) * 600 - 300;
+    const wfOff = waterfallHeightOffset(z);
+    const cxR = riverCenterX(z), hwR = riverHalfWidth(z); // 外提
+    const edgeX = cxR + hwR - overlap;
+    const waveA = Math.sin(z * 0.015); // 外提
+    for (let j = 0; j <= wSegs; j++) {
+      const idx = baseIdx + i * (wSegs + 1) + j;
+      const newX = edgeX + (j / wSegs) * (wid + overlap);
+      tPos.setX(idx, newX);
+      if (j === 0) {
+        tPos.setY(idx, -1.5 - wfOff);
+      } else {
+        const d = Math.max(0, Math.abs(newX - cxR) - hwR);
+        let h = Math.min(d * d * 0.04, 14) + waveA * Math.min(d * 0.3, 1.0);
+        tPos.setY(idx, h - wfOff);
+      }
+    }
+  }
+  tPos.needsUpdate = true;
+  if ((frameCount & 1) === 0) canyonTerrain.geometry.computeVertexNormals(); // 法线隔帧(视觉无差)
+
+  // 河流曲线滚动——让弯曲随玩家前进移动
+  const effSpeed = speed * (power.boost > 0 ? 1.5 : 1); // A1 加速道具
+  const scrollDist = (gameState===ST.PLAYING ? effSpeed : CFG.baseSpeed*0.3) * dt;
+  riverPhase += scrollDist;
+
+  // 白云飘动——跟随滚动 + 漂移 + 淡入淡出(不突然出现/消失)
+  for (const cl of clouds) {
+    cl.userData.baseZ += scrollDist;
+    // Z范围: -400 ~ 400, 超出则环绕
+    if (cl.userData.baseZ > 400) cl.userData.baseZ -= 800;
+    cl.position.z = cl.userData.baseZ;
+    cl.position.x += cl.userData.drift * dt;
+    // 根据Z位置计算淡入淡出: 边缘100单位内渐变
+    const zFade = Math.min(1, Math.abs(cl.userData.baseZ) / 100);
+    cl.material.opacity = cl.userData.targetOpacity * zFade;
+  }
+
+  // C4 鸟群——横穿天空 + 慢速视差滚动 + 拍翅
+  birdTimer -= dt;
+  if (birdTimer <= 0) { spawnBirdFlock(); birdTimer = 22 + Math.random() * 22; }
+  for (let i = birdFlocks.length - 1; i >= 0; i--) {
+    const fl = birdFlocks[i];
+    fl.position.x += fl.userData.dir * fl.userData.speed * dt;
+    fl.userData.baseZ += scrollDist * 0.3; // 视差：比地面滚动慢
+    fl.position.z = fl.userData.baseZ;
+    for (const b of fl.children) {
+      const flap = Math.sin(time * 9 + b.userData.flapPhase) * 0.55;
+      b.userData.wings[0].rotation.z = flap;
+      b.userData.wings[1].rotation.z = -flap;
+    }
+    if (Math.abs(fl.position.x) > 140 || fl.position.z > 15) { scene.remove(fl); birdFlocks.splice(i, 1); }
+  }
+
+  // C4 蜻蜓——贴水悬飞，四翼快拍（wings在创建时保留在userData里）
+  for (const d of dragonflies) {
+    d.userData.phase += dt * 6;
+    d.userData.wander += dt * 0.5;
+    d.position.x = d.userData.anchorX + Math.sin(d.userData.wander) * 2.5;
+    d.position.z = d.userData.anchorZ + Math.cos(d.userData.wander * 0.7) * 2;
+    d.position.y = 0.9 + Math.sin(d.userData.phase * 0.6) * 0.35;
+    d.rotation.y = d.userData.wander + Math.PI / 2;
+    const flap = Math.sin(time * 40 + d.userData.phase) * 0.7;
+    d.userData.wings[0].rotation.z = flap; d.userData.wings[1].rotation.z = -flap;
+    d.userData.wings[2].rotation.z = -flap; d.userData.wings[3].rotation.z = flap;
+  }
+
+  for (const v of vegObjects) {
+    v.userData.baseZ += scrollDist;
+    if (v.userData.baseZ > 300) {
+      v.userData.baseZ -= 600;
+      if (v.userData.side !== 0) v.userData.xOff = 0.5 + Math.random() * 12;
+    }
+    const bz = v.userData.baseZ;
+    const cx = riverCenterX(bz);
+    const hw = riverHalfWidth(bz);
+    if (v.userData.side === 0) {
+      // 水面物体（睡莲）——在河中央附近漂浮，跟随瀑布落差
+      v.position.x = cx + (v.userData.xOff || 0) * (hw - 1.5);
+      v.position.z = bz;
+      v.position.y = 0.05 + waterfallY(bz);
+    } else {
+      const newX = cx + v.userData.side * (hw + v.userData.xOff);
+      v.position.x = newX;
+      v.position.z = bz;
+      v.position.y = terrainHeight(newX, bz);
+    }
+  }
+
+  // 滚动瀑布位置
+  scrollWaterfalls(scrollDist);
+
+  // 瀑布粒子——跟随滚动位置更新
+  for (const wf of waterfalls) {
+    if (wf.userData.idx === undefined) continue;
+    const bz = waterfallZList[wf.userData.idx];
+    const cx = riverCenterX(bz);
+    const hw = riverHalfWidth(bz);
+    const wfTopY = 0;
+    const wfBotY = -WATERFALL_DROP;
+
+    if (wf.userData.isCurtain) {
+      // 水帘已删除——此分支永不触发，保留仅为兼容
+    } else if (wf.userData.splash) {
+      // 落水水花——底部弹跳：向上抛+重力，落回底部重新起跳
+      const pos = wf.geometry.attributes.position;
+      const vel = wf.userData.vel;
+      for (let i = 0; i < wf.userData.count; i++) {
+        vel[i*3+1] -= 12 * dt;
+        pos.array[i*3] += vel[i*3] * dt;
+        pos.array[i*3+1] += vel[i*3+1] * dt;
+        pos.array[i*3+2] += vel[i*3+2] * dt;
+        if (pos.array[i*3+1] < wfBotY - 0.2) {
+          pos.array[i*3] = cx + (Math.random()-0.5) * hw * 1.8;
+          pos.array[i*3+1] = wfBotY + Math.random() * 0.3;
+          pos.array[i*3+2] = bz + (Math.random()-0.5) * 4;
+          vel[i*3+1] = 2 + Math.random() * 4.5;
+          vel[i*3] = (Math.random()-0.5) * 2;
+          vel[i*3+2] = (Math.random()-0.5) * 2;
+        }
+      }
+      pos.needsUpdate = true;
+    } else if (wf.userData.vel) {
+      // 水帘粒子
+      const pos = wf.geometry.attributes.position;
+      const vel = wf.userData.vel;
+      for (let i = 0; i < wf.userData.count; i++) {
+        pos.array[i*3] = cx + (Math.random()-0.5) * hw * 1.8;
+        pos.array[i*3+1] += vel[i*3+1] * dt;
+        if (pos.array[i*3+1] < wfBotY) pos.array[i*3+1] = wfTopY + Math.random() * 2;
+        pos.array[i*3+2] = bz + (Math.random()-0.5) * WATERFALL_HALF_WIDTH;
+      }
+      pos.needsUpdate = true;
+    } else if (wf.userData.count !== undefined) {
+      // 水雾粒子
+      const pos = wf.geometry.attributes.position;
+      for (let i = 0; i < wf.userData.count; i++) {
+        pos.array[i*3] = cx + (Math.random()-0.5) * hw * 2.5;
+        pos.array[i*3+1] = wfBotY + Math.random() * 4;
+        pos.array[i*3+2] = bz - WATERFALL_HALF_WIDTH + Math.random() * 8;
+      }
+      pos.needsUpdate = true;
+    }
+  }
+
+  // 3D 角色动画 + 体感追踪（在游戏状态检查之前，确保始终运行）
+  if (mixer) mixer.update(dt);
+  if (characterModel) {
+    // 根据跳跃状态切换动画
+    let anim = 'idle';
+    const nowSec = performance.now() / 1000;
+    if (gameState === ST.PLAYING) {
+      if (poseData.inJump || nowSec < poseData.jumpEndTime) {
+        anim = 'jumping';
+      } else {
+        anim = 'idle';
+      }
+    }
+    const lastAnim = characterModel.userData.lastAnim || '';
+    if (anim !== lastAnim) {
+      console.log('Anim switch:', lastAnim, '→', anim, '| inJump:', poseData.inJump, 'jumpEnd:', poseData.jumpEndTime.toFixed(2), 'now:', nowSec.toFixed(2));
+      characterModel.userData.lastAnim = anim;
+    }
+    switchAnim(anim);
+
+    // 身体倾斜——跟随玩家左右倾斜（FBX动画基础上叠加）
+    // FBX骨骼名无冒号: mixamorigSpine, mixamorigSpine1, mixamorigHead
+    const spineBone = charBones['mixamorigSpine'] || charBones['mixamorig:Spine'] || charBones['Spine'] || charBones['Torso'];
+    if (spineBone) spineBone.rotation.z = poseData.lean * 0.3;
+    const spine1Bone = charBones['mixamorigSpine1'] || charBones['mixamorig:Spine1'] || charBones['Spine1'] || charBones['Abdomen'];
+    if (spine1Bone) spine1Bone.rotation.z = poseData.lean * 0.2;
+    const headBone = charBones['mixamorigHead'] || charBones['mixamorig:Head'] || charBones['Head'];
+    if (headBone) headBone.rotation.z = poseData.lean * 0.15;
+
+    // C6 划桨动画——倾斜时对应侧手臂前后划动（四元数叠加在FBX动画之上，不破坏原姿势）
+    {
+      const leanSig = poseData.detected ? poseData.lean : raftState.x / CFG.raftMaxOffset;
+      const wantStroke = Math.abs(leanSig) > 0.12 ? 1 : 0;
+      raftState.strokeBlend = (raftState.strokeBlend || 0) + (wantStroke - (raftState.strokeBlend || 0)) * Math.min(1, dt * 6);
+      if (raftState.strokeBlend > 0.02) {
+        const swing = Math.sin(time * 5.5) * 0.7 * raftState.strokeBlend;
+        const strokeL = leanSig < 0 ? swing : swing * 0.3;  // 左倾→左手主划
+        const strokeR = leanSig > 0 ? swing : swing * 0.3;  // 右倾→右手主划
+        const armL = charBones['mixamorigLeftArm'] || charBones['mixamorig:LeftArm'];
+        const armR = charBones['mixamorigRightArm'] || charBones['mixamorig:RightArm'];
+        const foreL = charBones['mixamorigLeftForeArm'] || charBones['mixamorig:LeftForeArm'];
+        const foreR = charBones['mixamorigRightForeArm'] || charBones['mixamorig:RightForeArm'];
+        if (armL) { _strokeQ.setFromAxisAngle(PADDLE_AXIS, strokeL); armL.quaternion.multiply(_strokeQ); }
+        if (armR) { _strokeQ.setFromAxisAngle(PADDLE_AXIS, strokeR); armR.quaternion.multiply(_strokeQ); }
+        if (foreL) { _strokeQ.setFromAxisAngle(PADDLE_AXIS, strokeL * 0.5); foreL.quaternion.multiply(_strokeQ); }
+        if (foreR) { _strokeQ.setFromAxisAngle(PADDLE_AXIS, strokeR * 0.5); foreR.quaternion.multiply(_strokeQ); }
+      }
+    }
+  }
+
+  if (gameState !== ST.PLAYING) {
+    splashParticles.update(dt); goldParticles.update(dt); updateCamera(dt, time);
+    return;
+  }
+
+  // 当前位置的河流宽度 → 影响速度
+  currentRiverWidth = riverHalfWidth(0);
+  const widthRatio = CFG.baseRiverHalfWidth / currentRiverWidth; // 窄→>1→快，宽→<1→慢
+  const targetSpeed = (CFG.baseSpeed + Math.min(CFG.maxSpeed - CFG.baseSpeed, distance / 220)) * widthRatio
+    + (difficulty === 'hard' ? 3 : 0); // B4 困难整体提速
+  speed += (targetSpeed - speed) * dt * 0.5;
+  speed = Math.max(8, Math.min(CFG.maxSpeed, speed));
+  distance += speed * dt;
+  noHitDistance += speed * dt;
+  score += Math.floor(speed * dt * 0.5);
+  checkQuests(false);
+
+  // B3 场景阶段切换——每1000m: 峡谷→雨林(雨)→雾林, 3秒渐变
+  const stageIdx = Math.floor(distance / 1000) % STAGES.length;
+  if (stageIdx !== stageState.idx) {
+    stageState.idx = stageIdx;
+    const s = STAGES[stageIdx];
+    stageState.tgt = { bg: new THREE.Color(s.bg), water: new THREE.Color(s.water), terrain: new THREE.Color(s.terrain), fogC: new THREE.Color(s.fogC), fogN: s.fogN, fogF: s.fogFar, sun: s.sun, hemi: s.hemi };
+    stageState.rainOn = s.rain;
+    stageBanner.textContent = s.name;
+    stageBanner.style.opacity = '1';
+    stageState.bannerT = 3;
+  }
+  if (stageState.tgt) {
+    const k = Math.min(1, dt * 0.8);
+    const cur = stageState.cur;
+    cur.bg.lerp(stageState.tgt.bg, k);
+    cur.water.lerp(stageState.tgt.water, k);
+    cur.terrain.lerp(stageState.tgt.terrain, k);
+    cur.fogC.lerp(stageState.tgt.fogC, k);
+    cur.fogN += (stageState.tgt.fogN - cur.fogN) * k;
+    cur.fogF += (stageState.tgt.fogF - cur.fogF) * k;
+    cur.sun += (stageState.tgt.sun - cur.sun) * k;
+    cur.hemi += (stageState.tgt.hemi - cur.hemi) * k;
+    scene.background.copy(cur.bg);
+    waterMat.color.copy(cur.water);
+    canyonTerrain.material.color.copy(cur.terrain);
+    riverbedMat.color.copy(cur.terrain);
+    scene.fog.color.copy(cur.fogC);
+    scene.fog.near = cur.fogN;
+    scene.fog.far = cur.fogF;
+    sunLight.intensity = cur.sun;
+    hemiLight.intensity = cur.hemi;
+  }
+  // B3 雨
+  rain.visible = stageState.rainOn;
+  if (stageState.rainOn) {
+    updateRain(dt);
+    rain.position.x = raft.position.x;
+  }
+  if (stageState.bannerT > 0) {
+    stageState.bannerT -= dt;
+    if (stageState.bannerT <= 0) stageBanner.style.opacity = '0';
+  }
+  score += Math.floor(speed * dt * 0.5);
+  checkQuests(false);
+
+  // 急流提示（窄段）
+  if (currentRiverWidth < 7) {
+    rapidFx.textContent = '⚡ 急流！';
+    rapidFx.style.opacity = '1';
+  } else if (currentRiverWidth > 11) {
+    rapidFx.textContent = '～ 平缓水域';
+    rapidFx.style.opacity = '0.5';
+  } else {
+    rapidFx.style.opacity = '0';
+  }
+
+  // 体感/键盘 → 筏子横向移动
+  const raftCx = riverCenterX(0);
+  if (poseData.detected) {
+    // 横移速度与玩家横移速度联动：leanVel 是 lean 的变化速率
+    // 直接用速度驱动，而不是设置目标位置
+    const leanSpeed = Math.max(-15, Math.min(15, poseData.leanVel));
+    raftState.targetX += leanSpeed * dt;
+    // 也用 lean 值作为偏置，保证最终位置和身体位置对应
+    raftState.targetX += (poseData.lean * CFG.raftMaxOffset - raftState.targetX) * dt * 1.5;
+  }
+  if (keys['ArrowLeft']||keys['a']||keys['A']) raftState.targetX -= dt*18;
+  if (keys['ArrowRight']||keys['d']||keys['D']) raftState.targetX += dt*18;
+  if ((keys[' ']||keys['ArrowUp']||keys['w']||keys['W']) && raftState.onWater) {
+    raftState.vy=10; raftState.onWater=false; raftState.bounceT=0.3;
+  }
+  raftState.targetX = Math.max(-CFG.raftMaxOffset, Math.min(CFG.raftMaxOffset, raftState.targetX));
+  raftState.x += (raftState.targetX - raftState.x) * dt * 8;
+  raftState.tilt = (raftState.targetX - raftState.x) * 0.05;
+  if (poseData.jumpImpulse && raftState.onWater) { raftState.vy=12; raftState.onWater=false; raftState.bounceT=0.3; }
+  poseData.jumpImpulse = false;
+
+  // 瀑布视觉区——与真实瀑布位置同步触发（原来按距离触发，与1200m外的实际瀑布脱节→"隐形碰撞"）
+  if (raftState.waterfallFx <= 0) {
+    for (const wz of waterfallZList) {
+      if (wz > -3 && wz < 3) {
+        raftState.waterfallFx = 2.5;
+        camState.shakeT = 0.8;
+        rapidFx.textContent = '🌊 瀑布！';
+        rapidFx.style.opacity = '1';
+        speed = Math.min(CFG.maxSpeed, speed * 1.35);
+        splashParticles.emit(raft.position.x, 1, -2, 25, 8, 8);
+        break;
+      }
+    }
+  }
+
+  // B1 瀑布QTE跳跃——主动高光时刻
+  {
+    let nearWz = null;
+    for (const wz of waterfallZList) if (wz > -35 && wz < 10) { nearWz = wz; break; }
+    if (nearWz === null) {
+      if (qte.state !== 'idle') { qte.state = 'idle'; qte.done = false; qteFx.style.opacity = '0'; qteFx.classList.remove('pulse'); }
+    } else if (nearWz > -5 && nearWz < 5) {
+      // 激活窗口：跳！
+      if (qte.state !== 'active') { qte.state = 'active'; qteFx.textContent = '跳！！↑'; qteFx.style.opacity = '1'; qteFx.classList.add('pulse'); }
+      if (!qte.done && (raftState.y > 0.4 || keys[' '])) {
+        // 成功：慢动作 + 奖励
+        qte.done = true;
+        score += 300;
+        slowmoT = 1.2;
+        rapidFx.textContent = '✨ 完美飞跃！+300';
+        rapidFx.style.opacity = '1';
+        qteFx.style.opacity = '0'; qteFx.classList.remove('pulse');
+        goldParticles.emit(raft.position.x, 1.5, 0, 30, 6, 8);
+        splashParticles.emit(raft.position.x, 0.5, -2, 25, 8, 8);
+      }
+    } else if (nearWz >= -30) {
+      // 预备提示
+      if (qte.state === 'idle') { qte.state = 'ready'; qteFx.textContent = '瀑布将至——准备跳！'; qteFx.style.opacity = '0.85'; qteFx.classList.remove('pulse'); }
+    }
+  }
+  if (raftState.waterfallFx > 0) {
+    raftState.waterfallFx -= dt;
+    if (raftState.waterfallFx <= 0) {
+      raftState.waterfallFx = 0;
+      rapidFx.style.opacity = '0';
+    }
+  }
+
+  if (!raftState.onWater) {
+    raftState.vy -= 28*dt; raftState.y += raftState.vy*dt;
+    if (raftState.y <= 0) { raftState.y=0; raftState.vy=0; raftState.onWater=true; raftState.bounceT=0.25; splashParticles.emit(raft.position.x, 0.5, 0, 10, 5, 5); }
+  }
+  if (raftState.bounceT > 0) raftState.bounceT -= dt;
+
+  // 筏子位置（跟随河流弯曲中心 + 横向偏移 + 瀑布落差）
+  const wfY = waterfallY(0); // 当前位置的水面Y（瀑布处下降）
+  const waveY = Math.sin(time*1.5 + raftState.x*0.3)*0.15 + Math.sin(time*2.2)*0.08;
+  const bobY = raftState.onWater ? waveY : raftState.y;
+  raft.position.x = raftCx + raftState.x;
+  raft.position.y = 0.4 + bobY + wfY; // 加上瀑布落差
+  // 筏子朝向河流方向（瀑布区时前倾）
+  const raftDir = riverDirection(0);
+  raft.rotation.z = raftState.tilt;
+  raft.rotation.x = raftState.onWater ? Math.sin(time*1.3)*0.04 : 0;
+  if (raftState.waterfallFx > 1.5) raft.rotation.x += 0.25; // 进入瀑布时前倾
+  raft.rotation.y = raftDir + raftState.tilt * 0.15;
+
+  // 桨动画
+  const ud = raft.userData;
+  if (ud.paddleL) { const phase=time*4; ud.paddleL.rotation.x=Math.sin(phase)*0.3; ud.paddleR.rotation.x=-Math.sin(phase)*0.3; }
+
+  // 物体沿弯曲路径移动
+  for (const o of gameObjects) {
+    o.userData.baseZ += effSpeed * dt;
+    o.position.z = o.userData.baseZ;
+    // 横向跟随河流弯曲
+    const objCx = riverCenterX(o.userData.baseZ);
+    const objHw = riverHalfWidth(o.userData.baseZ);
+    const lateralRatio = o.userData.lateralRatio !== undefined ? o.userData.lateralRatio : (() => {
+      o.userData.lateralRatio = (o.position.x - riverCenterX(o.userData.baseZ)) / Math.max(1, riverHalfWidth(o.userData.baseZ));
+      return o.userData.lateralRatio;
+    })();
+    o.position.x = objCx + lateralRatio * (objHw - 1);
+    // Y跟随瀑布落差——防止物体飞在天上
+    const objWfY = waterfallY(o.userData.baseZ);
+    if (o.userData.type==='coin' || o.userData.type==='heart' || o.userData.type==='power') {
+      o.rotation.y += dt*3;
+      o.position.y = 1.3 + Math.sin(time*2 + o.userData.spin)*0.2 + objWfY;
+      // 金币光晕球: 呼吸脉动(球体shader全角度可见, 无需billboard)
+      if (o.userData.type==='coin' && o.userData.glow) {
+        o.userData.glow.material.uniforms.uOpacity.value = 0.55 + 0.2 * (0.5 + 0.5 * Math.sin(time * Math.PI * 1.9 * 0.5));
+      }
+    } else {
+      // 岩石/浮木抬高出水面(0.55)，不再半浸水中难以辨认
+      o.position.y = 0.55 + objWfY;
+    }
+    // A1 磁铁：金币/爱心被吸向船（修正lateralRatio才能持续生效）
+    if (power.magnet > 0 && (o.userData.type==='coin' || o.userData.type==='heart') && o.position.z > -16) {
+      const targetRatio = (raft.position.x - objCx) / Math.max(1, objHw);
+      o.userData.lateralRatio += (targetRatio - o.userData.lateralRatio) * Math.min(1, dt * 4);
+      o.position.x = objCx + o.userData.lateralRatio * (objHw - 1);
+      o.userData.baseZ += 10 * dt;
+    }
+  }
+
+  // 碰撞——树桩和石头是障碍物，金币和爱心是奖励，道具是增益
+  for (const o of gameObjects) {
+    if (o.userData.hit) continue;
+    if (o.position.z < -1.5 || o.position.z > 1.5) continue;
+    const dx = Math.abs(o.position.x - raft.position.x);
+    if (dx > o.userData.w + 0.8) continue;
+    if (o.userData.type==='rock' || o.userData.type==='log') {
+      if (raftState.y > 1.2) continue;
+      if (power.boost > 0) continue; // A1 加速中无敌
+      if (power.shield) {
+        // A1 护盾抵挡一次
+        power.shield = false; shieldBubble.visible = false;
+        invuln = 1.2; camState.shakeT = 0.3;
+        goldParticles.emit(raft.position.x, 1.2, 0, 20, 5, 6);
+        rapidFx.textContent = '🛡️ 护盾抵挡！'; rapidFx.style.opacity = '1';
+        setTimeout(() => { rapidFx.style.opacity = '0'; }, 1000);
+      } else if (invuln <= 0) {
+        o.userData.hit=true; lives--; invuln=1.5; camState.shakeT=0.4; speed*=0.45;
+        splashParticles.emit(raft.position.x, 1, 0, 15, 6, 6);
+        checkQuests(true);
+      }
+    } else if (o.userData.type==='coin') {
+      o.userData.hit=true; coins++;
+      // A3 连击：2.5秒内连续收集，倍率最高×2
+      combo.count++; combo.timer = 2.5;
+      combo.mult = 1 + Math.min(combo.count, 10) * 0.1;
+      score += Math.round(100 * combo.mult * (power.double > 0 ? 2 : 1));
+      comboFx.textContent = `COMBO ×${combo.mult.toFixed(1)}`;
+      comboFx.style.opacity = '1';
+      comboFx.classList.add('pop');
+      setTimeout(()=>comboFx.classList.remove('pop'), 120);
+      goldParticles.emit(o.position.x, o.position.y, o.position.z, 10, 4, 4);
+      checkQuests(false);
+    } else if (o.userData.type==='heart') {
+      o.userData.hit=true; lives=Math.min(5, lives+1); score+=50;
+      goldParticles.emit(o.position.x, o.position.y, o.position.z, 8, 3, 3);
+    } else if (o.userData.type==='power') {
+      // A1 道具拾取
+      o.userData.hit = true;
+      const pt = o.userData.ptype;
+      if (pt === 'magnet') { power.magnet = 10; rapidFx.textContent = '🧲 磁铁！金币自动吸附'; }
+      else if (pt === 'shield') { power.shield = true; shieldBubble.visible = true; rapidFx.textContent = '🛡️ 护盾！抵挡一次撞击'; }
+      else if (pt === 'boost') { power.boost = 4; rapidFx.textContent = '⚡ 冲刺！无敌加速'; }
+      else { power.double = 12; rapidFx.textContent = '💰 双倍分数！'; }
+      rapidFx.style.opacity = '1';
+      setTimeout(() => { rapidFx.style.opacity = '0'; }, 1400);
+      score += 50;
+      goldParticles.emit(o.position.x, o.position.y, o.position.z, 18, 5, 7);
+    }
+  }
+
+  gameObjects = gameObjects.filter(o => {
+    if (o.position.z > 12 || o.userData.hit) { scene.remove(o); return false; }
+    return true;
+  });
+
+  spawnTimer -= dt;
+  if (spawnTimer <= 0) {
+    spawnObject();
+    // B4 难度节奏：简单刷得稀；困难"呼吸式"波浪(平静→密集→释放)
+    let mul = difficulty === 'easy' ? 1.7 : (difficulty === 'hard' ? 0.85 : 1.0);
+    if (difficulty === 'hard') {
+      const phase = (distance % 400) / 400;
+      const waveMul = phase < 0.35 ? 1.8 : (phase < 0.75 ? 0.5 : 1.0);
+      mul *= waveMul;
+    }
+    spawnTimer = Math.max(0.3, (0.9 + Math.random() * 0.6 - distance / 3000) * mul);
+  }
+  // A1 道具生成——约22~38秒一个
+  powerupTimer -= dt;
+  if (powerupTimer <= 0) {
+    spawnPowerup();
+    powerupTimer = 22 + Math.random() * 16;
+  }
+
+  // 鱼/鲨鱼系统
+  fishTimer -= dt;
+  if (fishTimer <= 0) {
+    spawnFish();
+    fishTimer = 6 + Math.random() * 8; // 6~14秒出现一次
+  }
+  // A2 鲨鱼威胁追踪——鲨鱼与鱼共用同款游动(横向巡游+边界反弹)，不会撞岸
+  let sharkHunting = false;
+  for (const f of fishObjects) {
+    f.userData.lifetime += dt;
+    f.userData.bob += dt * 3;
+    // 先更新Z（逆流而上 + 跟随河流滚动）
+    f.userData.baseZ += f.userData.upstreamSpeed * dt;
+    f.userData.baseZ += scrollDist;
+    f.position.z = f.userData.baseZ;
+
+    // 横向巡游——鱼和鲨鱼同款
+    f.userData.xOff += f.userData.direction * 3 * dt;
+    const hw = riverHalfWidth(f.position.z);
+    if (Math.abs(f.userData.xOff) > hw * 0.7) {
+      f.userData.direction *= -1;
+      f.userData.xOff = Math.sign(f.userData.xOff) * hw * 0.7;
+      // 鱼PI/2(长轴X)，鲨鱼0(长轴Z流线朝向)
+      f.rotation.y = f.userData.isShark ? 0 : Math.PI / 2 + f.userData.direction * 0.25;
+    }
+    f.position.x = riverCenterX(f.position.z) + f.userData.xOff;
+
+    if (f.userData.isShark && f.position.z > -130 && f.position.z < 3) {
+      // 鲨鱼纯视觉观赏(无伤害): 只保留跳跃表演, 移动与鱼巡游一致
+      sharkHunting = true;
+      const jump = f.userData.jump;
+      if (jump) {
+        // 空中抛物线: Z脚本插值 + Y弧线 + 俯仰(起跳昂首→入水俯冲)
+        jump.t += dt;
+        const p = Math.min(1, jump.t / jump.dur);
+        f.userData.baseZ = jump.z0 + (jump.z1 - jump.z0) * p;
+        f.position.z = f.userData.baseZ;
+        f.position.y = jump.y0 + jump.v0 * jump.t - 9 * jump.t * jump.t;
+        f.rotation.x = -0.65 * Math.cos(Math.PI * p);
+        if (p >= 1) {
+          f.userData.jump = null;
+          f.rotation.x = 0;
+          // 落水水花
+          splashParticles.emit(f.position.x, 0.3, f.position.z, 30, 5, 7);
+        }
+      } else if (!f.userData.jumped) {
+        // 触发跳跃: over=船前起跳越过头顶 / front=远处起跳船前落水
+        const trigZ = f.userData.jumpPlan === 'over' ? -11 : -26;
+        if (f.position.z > trigZ) {
+          const over = f.userData.jumpPlan === 'over';
+          const apex = over ? 8.4 : 6.4; // 跳跃高度×2
+          const v0 = Math.sqrt(36 * apex); // g=18: v0=√(2g·h)
+          f.userData.jump = {
+            t: 0,
+            dur: (2 * v0) / 18,
+            v0,
+            z0: f.position.z,
+            z1: over ? 5.5 : -5,
+            y0: f.position.y
+          };
+          splashParticles.emit(f.position.x, 0.2, f.position.z, 22, 4, 6); // 起跳水花
+          f.userData.jumped = true;
+        }
+      }
+      // 冲过船后立即下潜离场——不从背后绕(跳跃中不判)
+      if (f.position.z > 3 && !f.userData.jump) f.userData.lifetime = 99;
+    }
+    // FBX新鱼播放游动动画
+    if (f.userData.mixer) f.userData.mixer.update(dt);
+    // 上下浮动(跳跃中Y由抛物线控制)
+    if (!f.userData.jump) {
+      // 鲨鱼只露背鳍(-1.4)，蝠鲼深滑(-1.8)，普通鱼在水下(-1.5)
+      const swimY = f.userData.isShark ? -1.4 : (f.userData.kind === 'manta' ? -1.8 : -1.5); // 鲨鱼只露背鳍(鳍尖raw1.29/背0.5→水线0.85)
+      f.position.y = swimY + waterfallY(f.position.z) + Math.sin(f.userData.bob) * 0.15;
+      // 身体摆动: 蝠鲼振翅(滚转±0.2), 其他鱼轻微摆尾
+      f.rotation.z = Math.sin(f.userData.bob * (f.userData.kind === 'manta' ? 1.5 : 2)) * (f.userData.kind === 'manta' ? 0.2 : 0.1);
+    }
+  }
+  // A2 鲨鱼警告UI
+  sharkWarn.style.display = sharkHunting ? 'block' : 'none';
+  sharkWarn.style.opacity = sharkHunting ? '1' : '0';
+  // 清理超出范围的鱼
+  for (let i = fishObjects.length - 1; i >= 0; i--) {
+    const f = fishObjects[i];
+    if (f.position.z > 12 || f.userData.lifetime > 30) {
+      scene.remove(f);
+      fishObjects.splice(i, 1);
+    }
+  }
+  if (invuln > 0) invuln -= dt;
+  // A3 连击倒计时
+  if (combo.timer > 0) {
+    combo.timer -= dt;
+    if (combo.timer <= 0) { combo.count = 0; combo.mult = 1; comboFx.style.opacity = '0'; }
+  }
+  // A1 道具倒计时 + HUD(名称+失效进度条) + 护盾气泡脉动
+  if (power.magnet > 0) power.magnet -= dt;
+  if (power.boost > 0) power.boost -= dt;
+  if (power.double > 0) power.double -= dt;
+  shieldBubble.material.opacity = 0.12 + Math.sin(time * 5) * 0.05;
+  pwMagnet.classList.toggle('on', power.magnet > 0);
+  pwShield.classList.toggle('on', power.shield);
+  pwBoost.classList.toggle('on', power.boost > 0);
+  pwDouble.classList.toggle('on', power.double > 0);
+  pwfMagnet.style.width = Math.max(0, power.magnet / 10 * 100) + '%';
+  pwfBoost.style.width = Math.max(0, power.boost / 4 * 100) + '%';
+  pwfDouble.style.width = Math.max(0, power.double / 12 * 100) + '%';
+  const speedRatio = (speed - CFG.baseSpeed) / (CFG.maxSpeed - CFG.baseSpeed);
+  speedFx.style.opacity = String(speedRatio * 0.6);
+  // C2 速度FOV——速度越快视野越广，加速体感
+  {
+    const targetFov = 72 + Math.max(0, speedRatio) * 13;
+    camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 4);
+    camera.updateProjectionMatrix();
+  }
+  // C1 尾迹随速度变长变浓
+  {
+    const wakeLen = 2.5 + Math.max(0, speedRatio) * 7;
+    wakeL.scale.y = wakeLen; wakeR.scale.y = wakeLen;
+    const wakeO = 0.1 + Math.max(0, speedRatio) * 0.45;
+    wakeL.material.opacity = wakeO; wakeR.material.opacity = wakeO;
+  }
+  if (raftState.onWater && Math.random() < 0.2) splashParticles.emit(raft.position.x + (Math.random()-0.5)*2.5, 0.3, -1.5, 3, 2.5, 2.5);
+
+  splashParticles.update(dt); goldParticles.update(dt); updateCamera(dt, time);
+
+  scoreVal.textContent = score; distVal.textContent = Math.floor(distance)+'m';
+  livesEl.textContent = '🐋'.repeat(Math.max(0,lives)) || '💔';
+  const dotLeft = 50 + (poseData.detected ? poseData.lean : raftState.x/CFG.raftMaxOffset)*42;
+  leanDot.style.left = dotLeft + '%';
+  raft.visible = invuln <= 0 || Math.floor(invuln*12)%2===0;
+  if (lives <= 0) { raft.visible=true; gameOver(); }
+}
+
+//==================================================================
+// 主循环
+//==================================================================
+const clock = new THREE.Clock();
+let frameCount = 0;
+let fpsFrames = 0, fpsTime = 0;
+let renderError = false;
+function loop() {
+  frameCount++;
+  // FPS统计: 每0.5秒更新一次DOM(每帧console.log才伤性能, 2Hz文本写≈0开销)
+  const rawDt = Math.min(0.05, clock.getDelta());
+  fpsFrames++; fpsTime += rawDt;
+  if (fpsTime >= 0.5) {
+    const el = document.getElementById('fpsVal');
+    if (el) el.textContent = Math.round(fpsFrames / fpsTime);
+    fpsFrames = 0; fpsTime = 0;
+  }
+  // B1 慢动作：QTE成功后时间放慢再恢复
+  if (slowmoT > 0) {
+    slowmoT -= rawDt;
+    timeScale = slowmoT > 0.35 ? 0.45 : 0.45 + (1 - Math.max(0, slowmoT) / 0.35) * 0.55;
+    if (slowmoT <= 0) timeScale = 1;
+  }
+  const dt = rawDt * timeScale;
+  try {
+    if (gameState !== ST.PAUSED) {
+      update(dt);
+    }
+    composer.render();
+    // 暂停遮罩
+    pauseOverlay.style.display = (gameState === ST.PAUSED) ? 'flex' : 'none';
+  } catch(e) {
+    if (!renderError) {
+      renderError = true;
+      console.error('渲染循环错误:', e);
+      // 回退到直接渲染（跳过后处理）
+      try { renderer.render(scene, camera); } catch(e2) { console.error('回退渲染也失败:', e2); }
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+startBtn.addEventListener('click', () => { if (gameState===ST.READY) startGame(); });
+restartBtn.addEventListener('click', () => { if (gameState===ST.OVER) startGame(); });
+
+initQuestSystem();
+initPose();
+loop();
+
+// ===== 调试导出（控制台可用 window.dbg.xxx 访问）=====
+window.dbg = {
+  THREE, scene, camera, renderer, water, riverbed, canyonTerrain, raft, sunLight, hemiLight, composer, CFG,
+  get characterModel() { return characterModel; },
+  get mixer() { return mixer; },
+  terrainHeight: (x,z)=>terrainHeight(x,z), riverCenterX: (z)=>riverCenterX(z), riverHalfWidth: (z)=>riverHalfWidth(z),
+  // 直接访问骨骼
+  charBones,
+  poseData,
+  // 天空调试：在控制台直接修改
+  sky, skyU, sunParams, updateSun,
+  // 快捷调天空：dbg.skySet({turbidity:5, rayleigh:2, elevation:20})
+  skySet(opts) {
+    if (opts.turbidity !== undefined) skyU['turbidity'].value = opts.turbidity;
+    if (opts.rayleigh !== undefined) skyU['rayleigh'].value = opts.rayleigh;
+    if (opts.mieCoefficient !== undefined) skyU['mieCoefficient'].value = opts.mieCoefficient;
+    if (opts.mieDirectionalG !== undefined) skyU['mieDirectionalG'].value = opts.mieDirectionalG;
+    if (opts.elevation !== undefined) sunParams.elevation = opts.elevation;
+    if (opts.azimuth !== undefined) sunParams.azimuth = opts.azimuth;
+    updateSun();
+    // 刷新环境贴图
+    pmremGenerator.dispose();
+    const newEnv = pmremGenerator.fromScene(sky);
+    scene.environment = newEnv.texture;
+    if (water?.material?.uniforms?.['sunDirection']) {
+      water.material.uniforms['sunDirection'].value.copy(sun);
+    }
+    console.log('Sky updated:', { turbidity: skyU['turbidity'].value, rayleigh: skyU['rayleigh'].value, mieCoefficient: skyU['mieCoefficient'].value, mieDirectionalG: skyU['mieDirectionalG'].value, elevation: sunParams.elevation, azimuth: sunParams.azimuth });
+  },
+  // 手臂调试：dbg.checkArms() 查看骨骼状态
+  checkArms() {
+    const names = ['UpperArmL','UpperArmR','LowerArmL','LowerArmR','ShoulderL','ShoulderR'];
+    console.log('=== 手臂骨骼状态 ===');
+    for (const n of names) {
+      const b = charBones[n];
+      if (b) {
+        console.log(`${n}: rotation=(${b.rotation.x.toFixed(2)}, ${b.rotation.y.toFixed(2)}, ${b.rotation.z.toFixed(2)}) quaternion=(${b.quaternion.x.toFixed(3)}, ${b.quaternion.y.toFixed(3)}, ${b.quaternion.z.toFixed(3)}, ${b.quaternion.w.toFixed(3)})`);
+      } else {
+        console.log(`${n}: ❌ 未找到`);
+      }
+    }
+    console.log('poseData.detected:', poseData.detected);
+    console.log('mixer:', mixer ? '存在' : 'null');
+    console.log('characterModel:', characterModel ? '存在' : 'null');
+  },
+  // 手动设置手臂角度：dbg.setArm(1.5) 
+  setArm(z) {
+    if (charBones['UpperArmL']) { charBones['UpperArmL'].rotation.z = z; console.log('UpperArmL rotation.z =', z); }
+    if (charBones['UpperArmR']) { charBones['UpperArmR'].rotation.z = -z; console.log('UpperArmR rotation.z =', -z); }
+  },
+  // 设置左臂三轴：dbg.setArmL(x, y, z)
+  setArmL(x, y, z) {
+    const b = charBones['UpperArmL'];
+    if (b) { b.rotation.set(x||0, y||0, z||0); console.log(`UpperArmL set (${x}, ${y}, ${z})`); }
+  },
+  // 设置右臂三轴：dbg.setArmR(x, y, z)
+  setArmR(x, y, z) {
+    const b = charBones['UpperArmR'];
+    if (b) { b.rotation.set(x||0, y||0, z||0); console.log(`UpperArmR set (${x}, ${y}, ${z})`); }
+  },
+  // 设置左前臂三轴：dbg.setForeL(x, y, z)
+  setForeL(x, y, z) {
+    const b = charBones['LowerArmL'];
+    if (b) { b.rotation.set(x||0, y||0, z||0); console.log(`LowerArmL set (${x}, ${y}, ${z})`); }
+  },
+  // 设置右前臂三轴：dbg.setForeR(x, y, z)
+  setForeR(x, y, z) {
+    const b = charBones['LowerArmR'];
+    if (b) { b.rotation.set(x||0, y||0, z||0); console.log(`LowerArmR set (${x}, ${y}, ${z})`); }
+  },
+  // 一键测试：dbg.testArm() 自动遍历常见角度
+  testArm() {
+    const tests = [
+      {x:0, y:0, z:0, label:'T-pose(水平)'},
+      {x:-1.57, y:0, z:0, label:'X=-90°(下)'},
+      {x:1.57, y:0, z:0, label:'X=+90°(上)'},
+      {x:0, y:0, z:1.57, label:'Z=+90°(后)'},
+      {x:0, y:0, z:-1.57, label:'Z=-90°(前)'},
+      {x:0, y:1.57, z:0, label:'Y=+90°(外旋)'},
+      {x:-1.57, y:0, z:-0.3, label:'X=-90°+Z收'},
+      {x:-1.2, y:0, z:-0.2, label:'X=-69°+Z收(自然)'},
+    ];
+    let i = 0;
+    const run = () => {
+      if (i >= tests.length) { console.log('测试完成'); return; }
+      const t = tests[i];
+      if (charBones['UpperArmL']) charBones['UpperArmL'].rotation.set(t.x, t.y, t.z);
+      if (charBones['UpperArmR']) charBones['UpperArmR'].rotation.set(t.x, t.y, t.z);
+      console.log(`[${i+1}/${tests.length}] ${t.label}: x=${t.x} y=${t.y} z=${t.z}`);
+      i++;
+      setTimeout(run, 1500);
+    };
+    run();
+  },
+  // 开关手臂追踪：dbg.toggleArms()
+  toggleArms() {
+    armTrackingEnabled = !armTrackingEnabled;
+    console.log('手臂追踪:', armTrackingEnabled ? '✅ 开启' : '❌ 关闭');
+  },
+  // 实时遍历characterModel，输出所有对象类型和名称
+  dumpBones() {
+    if (!characterModel) { console.log('characterModel is null'); return; }
+    console.log('=== 实时遍历 characterModel ===');
+    let count = 0;
+    characterModel.traverse(o => {
+      count++;
+      const types = [];
+      if (o.isBone) types.push('Bone');
+      if (o.isMesh) types.push('Mesh');
+      if (o.isSkinnedMesh) types.push('SkinnedMesh');
+      if (o.isObject3D) types.push('Object3D');
+      if (types.length > 0) console.log(`  [${count}] ${o.name || 'unnamed'} types=[${types.join(',')}]`);
+      if (count > 80) { console.log('  ...(truncated)'); return; }
+    });
+    console.log(`Total objects: ${count}`);
+    console.log('charBones keys:', Object.keys(charBones));
+  },
+
+  // ===== 橡皮筏材质调试 =====
+  // 获取橡皮筏所有mesh和材质
+  raftParts() {
+    const parts = [];
+    raft.traverse(o => {
+      if (o.isMesh) {
+        parts.push(o);
+        console.log(`[${parts.length}] ${o.name || 'unnamed'} | color=#${o.material.color?.getHexString?.()||'?'} roughness=${o.material.roughness} metalness=${o.material.metalness} envMapIntensity=${o.material.envMapIntensity}`);
+      }
+    });
+    console.log(`共 ${parts.length} 个mesh。用 dbg.raftSet(序号, {参数}) 修改`);
+    return parts;
+  },
+  // 设置橡皮筏某个部件的材质参数: dbg.raftSet(1, {color:0xffdd00, roughness:0.6, metalness:0, envMapIntensity:0.8})
+  raftSet(idx, opts) {
+    const parts = [];
+    raft.traverse(o => { if (o.isMesh) parts.push(o); });
+    const m = parts[idx - 1];
+    if (!m) { console.log(`❌ 找不到第${idx}个mesh，共${parts.length}个`); return; }
+    if (opts.color !== undefined) { m.material.color = new THREE.Color(opts.color); }
+    if (opts.roughness !== undefined) m.material.roughness = opts.roughness;
+    if (opts.metalness !== undefined) m.material.metalness = opts.metalness;
+    if (opts.envMapIntensity !== undefined) m.material.envMapIntensity = opts.envMapIntensity;
+    if (opts.emissive !== undefined) { m.material.emissive = new THREE.Color(opts.emissive); }
+    if (opts.emissiveIntensity !== undefined) m.material.emissiveIntensity = opts.emissiveIntensity;
+    if (opts.opacity !== undefined) { m.material.transparent = true; m.material.opacity = opts.opacity; }
+    m.material.needsUpdate = true;
+    console.log(`✅ [${idx}] ${m.name||'unnamed'} 已更新:`, {
+      color: '#'+m.material.color.getHexString(),
+      roughness: m.material.roughness,
+      metalness: m.material.metalness,
+      envMapIntensity: m.material.envMapIntensity,
+      emissive: '#'+m.material.emissive.getHexString(),
+      emissiveIntensity: m.material.emissiveIntensity,
+      opacity: m.material.opacity,
+    });
+  },
+  // 一次性设置所有橡皮筏部件: dbg.raftAll({color:0xffdd00, roughness:0.5})
+  raftAll(opts) {
+    let count = 0;
+    raft.traverse(o => {
+      if (o.isMesh) {
+        count++;
+        if (opts.color !== undefined) o.material.color = new THREE.Color(opts.color);
+        if (opts.roughness !== undefined) o.material.roughness = opts.roughness;
+        if (opts.metalness !== undefined) o.material.metalness = opts.metalness;
+        if (opts.envMapIntensity !== undefined) o.material.envMapIntensity = opts.envMapIntensity;
+        if (opts.emissive !== undefined) o.material.emissive = new THREE.Color(opts.emissive);
+        if (opts.emissiveIntensity !== undefined) o.material.emissiveIntensity = opts.emissiveIntensity;
+        if (opts.opacity !== undefined) { o.material.transparent = true; o.material.opacity = opts.opacity; }
+        o.material.needsUpdate = true;
+      }
+    });
+    console.log(`✅ 已更新全部 ${count} 个部件`, opts);
+  },
+  // 查看当前橡皮筏所有材质参数
+  raftDump() {
+    let count = 0;
+    raft.traverse(o => {
+      if (o.isMesh) {
+        count++;
+        console.log(`[${count}] ${o.name||'unnamed'}:`, {
+          color: '#'+o.material.color.getHexString(),
+          roughness: o.material.roughness,
+          metalness: o.material.metalness,
+          envMapIntensity: o.material.envMapIntensity,
+          emissive: '#'+o.material.emissive.getHexString(),
+          emissiveIntensity: o.material.emissiveIntensity,
+          opacity: o.material.opacity,
+        });
+      }
+    });
+  }
+};
+</script>
+</body>
+</html>
